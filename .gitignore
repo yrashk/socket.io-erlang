@@ -1,4 +1,4 @@
 ebin/socketio.app
 ebin/*.beam
-deps
+deps/simple_bridge
 .eunit
