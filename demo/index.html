@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <script src="/socket.io.js">
+    </script>
+
+    <script type="text/javascript">
+              function init() {
+                socket = new io.Socket('localhost');
+                socket.connect();
+                socket.on('connect', function(){
+                console.log("Imma connectad!");
+              });
+              socket.on('message', function(data){
+                console.log("Imma haz data: " + data);
+              });
+
+              socket.send('some data');
+      }
+    </script>
+  </head>
+
+  <body onLoad="init()">
+
+  </body>
+</html>
