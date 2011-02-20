@@ -1,4 +1,5 @@
 ebin/socketio.app
 ebin/*.beam
 deps/simple_bridge
+demo/misultin
 .eunit
