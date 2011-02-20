@@ -73,7 +73,7 @@ parse_1(#parser{ expr = {message, Type, Length}, buf = [$:|T], acc = Acc } = Par
 parse_1(#parser{ expr = {message, Type, Length}, buf = [H|T], acc = Acc } = Parser) ->
         parse_1(Parser#parser{ expr = {message, Type, Length - 1}, buf = T, acc = [H|Acc] });
 
-parse_1(#parser{ expr = {message, Type, 0, Anns}, buf = [$,|T], acc = Acc, f = F } = Parser) ->
+parse_1(#parser{ expr = {message, _Type, 0, _Anns}, buf = [$,|T], acc = _Acc, f = F } = Parser) ->
         F(message(Parser)),
         parse_1(Parser#parser{ expr = message, buf = T, acc = [] });
 
