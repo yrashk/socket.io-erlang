@@ -1,4 +1,4 @@
--module(socketio_data).
+-module(socketio_data_v1).
 -export([parse/2, string_reader/2]).
 
 -record(parser,
