@@ -1,5 +1,5 @@
 #! /usr/bin/env escript
-%%! -pa ../ebin misultin/ebin
+%%! -pa ../ebin ../deps/misultin/ebin
 -mode(compile).
 
 main(_) ->
