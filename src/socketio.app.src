@@ -3,6 +3,7 @@
   {description, ""},
   {vsn, "1"},
   {registered, []},
+  {agner, [{requires, ["misultin"]}]},
   {applications, [
                   kernel,
                   stdlib
