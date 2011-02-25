@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, start/3]).
+-export([start_link/3, start/3, send/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -35,6 +35,9 @@ start_link(SessionId, MessageHandler, ConnectionReference) ->
 
 start(SessionId, MessageHandler, ConnectionReference) ->
     supervisor:start_child(socketio_client_sup, [SessionId, MessageHandler, ConnectionReference]).
+
+send(Server, Message) ->
+    gen_server:cast(Server, {send, Message}).
 
 %%%===================================================================
 %%% gen_server callbacks

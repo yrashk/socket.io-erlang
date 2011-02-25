@@ -15,9 +15,9 @@ handle_request({abs_path, "/"}, Req) ->
 handle_request({abs_path, _Path}, Req) ->
     Req:respond(200).
 
-handle_message(Server, #msg{ content = Content } = Msg) ->
-    io:format("Got a message: ~p from ~p~n",[Msg, Server]),
-    gen_server:cast(Server, {send, #msg{ content = "hello!" }}),
-    gen_server:cast(Server, {send, #msg{ content = [{<<"echo">>, Content}], json = true }}).
+handle_message(Client, #msg{ content = Content } = Msg) ->
+    io:format("Got a message: ~p from ~p~n",[Msg, Client]),
+    socketio_client:send(Client, #msg{ content = "hello!" }),
+    socketio_client:send(Client, #msg{ content = [{<<"echo">>, Content}], json = true}).
 
 
