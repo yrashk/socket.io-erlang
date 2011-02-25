@@ -1,5 +1,4 @@
-
--module(socketio_sup).
+-module(socketio_http_sup).
 
 -behaviour(supervisor).
 
@@ -24,8 +23,8 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, [
-                                  {socketio_http_sup, {socketio_http_sup, start_link, []}, 
-                                   permanent, infinity, supervisor, [socketio_http_sup]}
+    {ok, { {simple_one_for_one, 5, 10}, [
+                                  {socketio_http, {socketio_http, start_link, []}, 
+                                   permanent, 5000, worker, [socketio_http]}
                                  ]} }.
 

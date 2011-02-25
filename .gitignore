@@ -1,5 +1,5 @@
 ebin/socketio.app
 ebin/*.beam
-deps/misultin
+deps
 .eunit
 .agner.config

@@ -5,17 +5,18 @@
     </script>
 
     <script type="text/javascript">
-              function init() {
-                socket = new io.Socket('localhost');
-                socket.connect();
-                socket.on('connect', function(){
-                console.log("Imma connectad!");
-              });
-              socket.on('message', function(data){
-                console.log("Imma haz data: " + data);
-              });
+      function init() {
+      socket = new io.Socket('localhost');
+      socket.on('message', function(data){
+         console.log(data);
+      });
+      socket.on('connect', function(){
+         console.log("Imma connectad!");
+         console.log(socket);
+         socket.send({msg: "Erlang rulez!"});
 
-              socket.send('some data');
+      });
+      socket.connect();
       }
     </script>
   </head>

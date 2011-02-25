@@ -3,11 +3,11 @@
   {description, ""},
   {vsn, "1"},
   {registered, []},
-  {agner, [{requires, ["misultin"]}]},
+  {agner, [{requires, ["misultin","ossp_uuid","jsx"]}]},
   {applications, [
                   kernel,
                   stdlib
                  ]},
   {mod, { socketio_app, []}},
-  {env, []}
+  {env, [ {heartbeat_interval, 10000} ]}
  ]}.

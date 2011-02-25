@@ -1,22 +1,22 @@
 #! /usr/bin/env escript
-%%! -pa ../ebin ../deps/misultin/ebin
+%%! -pa ../ebin ../deps/misultin/ebin ../deps/ossp_uuid/ebin ../deps/jsx/ebin
 -mode(compile).
+-include_lib("../include/socketio.hrl").
+-export([handle_request/2, handle_message/3]).
 
 main(_) ->
-    misultin:start_link([{port, 7878}, {loop, fun(Req) -> handle_http(Req) end}]),
+    application:start(socketio),
+    socketio_http:start(7878, ?MODULE, ?MODULE),
     receive _ -> ok end.
 
-handle_http(Req) ->
-    handle_http_1(Req:get(uri), Req).
-
-handle_http_1({abs_path, "/socket.io.js"}, Req) ->
-    Req:file(filename:join([filename:dirname(code:which(?MODULE)), "..", "deps", "Socket.IO", "socket.io.js"]));
-handle_http_1({abs_path, "/"}, Req) ->
+handle_request({abs_path, "/"}, Req) ->
     Req:file(filename:join([filename:dirname(code:which(?MODULE)), "index.html"]));
-handle_http_1({abs_path, Path}, Req) ->
-    io:format("~p~n", [{Path, Req}]),
+handle_request({abs_path, _Path}, Req) ->
     Req:respond(200).
 
-
+handle_message(Server, SessionID, #msg{ content = Content } = Msg) ->
+    io:format("Got a message: ~p from ~p~n",[Msg, SessionID]),
+    gen_server:call(Server, {send, SessionID, #msg{ content = "hello!" }}),
+    gen_server:call(Server, {send, SessionID, #msg{ content = [{<<"echo">>, Content}], json = true }}).
 
 
