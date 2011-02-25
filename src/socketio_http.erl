@@ -3,7 +3,8 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, start/3]).
+-export([start_link/2, start/2]).
+-export([event_manager/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -13,8 +14,8 @@
 
 -record(state, {
           default_http_handler,
-          message_handler,
-          sessions
+          sessions,
+          event_manager
          }).
 
 %%%===================================================================
@@ -28,11 +29,14 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Port, DefaultHttpHandler, MessageHandler) ->
-    gen_server:start_link(?MODULE, [Port, DefaultHttpHandler, MessageHandler], []).
+start_link(Port, DefaultHttpHandler) ->
+    gen_server:start_link(?MODULE, [Port, DefaultHttpHandler], []).
 
-start(Port, DefaultHttpHandler, MessageHandler) ->
-    supervisor:start_child(socketio_http_sup, [Port, DefaultHttpHandler, MessageHandler]).
+start(Port, DefaultHttpHandler) ->
+    supervisor:start_child(socketio_http_sup, [Port, DefaultHttpHandler]).
+
+event_manager(Server) ->
+    gen_server:call(Server, event_manager).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -49,7 +53,7 @@ start(Port, DefaultHttpHandler, MessageHandler) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Port, DefaultHttpHandler, MessageHandler]) ->
+init([Port, DefaultHttpHandler]) ->
     Self = self(),
     process_flag(trap_exit, true),
     misultin:start_link([{port, Port},
@@ -57,10 +61,11 @@ init([Port, DefaultHttpHandler, MessageHandler]) ->
                          {ws_loop, fun (Ws) -> handle_websocket(Self, Ws) end},
                          {ws_autoexit, false}
                         ]),
+    {ok, EventMgr} = gen_event:start_link(),
     {ok, #state{
        default_http_handler = DefaultHttpHandler,
-       message_handler = MessageHandler,
-       sessions = ets:new(socketio_sessions,[public])
+       sessions = ets:new(socketio_sessions,[public]),
+       event_manager = EventMgr
       }}.
 
 %%--------------------------------------------------------------------
@@ -90,12 +95,19 @@ handle_call({request, Path, Req}, _From, #state{ default_http_handler = HttpHand
     {reply, Response, State};
 
 %% Sessions
-handle_call({session, generate, ConnectionReference}, _From, #state{ message_handler = MessageHandler, sessions = Sessions } = State) ->
+handle_call({session, generate, ConnectionReference}, _From, #state{ sessions = Sessions,
+                                                                     event_manager = EventManager
+                                                                   } = State) ->
     UUID = binary_to_list(ossp_uuid:make(v4, text)),
-    {ok, Pid} = socketio_client:start(UUID, MessageHandler, ConnectionReference),
+    {ok, Pid} = socketio_client:start(UUID, ConnectionReference),
     link(Pid),
     ets:insert(Sessions, [{UUID, Pid}, {Pid, UUID}]),
-    {reply, {UUID, Pid}, State}.
+    gen_event:notify(EventManager, {client, Pid}),
+    {reply, {UUID, Pid}, State};
+
+%% Event management
+handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
+    {reply, EventMgr, State}.
 
 
 %%--------------------------------------------------------------------
@@ -121,11 +133,12 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({'EXIT', Pid, _}, #state{ sessions = Sessions } = State) ->
+handle_info({'EXIT', Pid, _}, #state{ event_manager = EventManager, sessions = Sessions } = State) ->
     case ets:lookup(Sessions, Pid) of
         [{Pid, UUID}] ->
             ets:delete(Sessions,UUID),
-            ets:delete(Sessions,Pid);
+            ets:delete(Sessions,Pid),
+            gen_event:notify(EventManager, {disconnect, Pid});
         _ ->
             ignore
     end,

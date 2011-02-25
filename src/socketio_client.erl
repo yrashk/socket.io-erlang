@@ -3,7 +3,8 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, start/3, send/2]).
+-export([start_link/2, start/2]).
+-export([event_manager/1, send/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -16,7 +17,8 @@
           message_handler,
           connection_reference,
           heartbeats = 0,
-          heartbeat_interval
+          heartbeat_interval,
+          event_manager
          }).
 
 %%%===================================================================
@@ -30,14 +32,17 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(SessionId, MessageHandler, ConnectionReference) ->
-    gen_server:start_link(?MODULE, [SessionId, MessageHandler, ConnectionReference], []).
+start_link(SessionId, ConnectionReference) ->
+    gen_server:start_link(?MODULE, [SessionId, ConnectionReference], []).
 
-start(SessionId, MessageHandler, ConnectionReference) ->
-    supervisor:start_child(socketio_client_sup, [SessionId, MessageHandler, ConnectionReference]).
+start(SessionId, ConnectionReference) ->
+    supervisor:start_child(socketio_client_sup, [SessionId, ConnectionReference]).
 
 send(Server, Message) ->
     gen_server:cast(Server, {send, Message}).
+
+event_manager(Server) ->
+    gen_server:call(Server, event_manager).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -54,7 +59,7 @@ send(Server, Message) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([SessionId, MessageHandler, ConnectionReference]) ->
+init([SessionId, ConnectionReference]) ->
     gen_server:cast(self(), hearbeat),
     HeartbeatInterval = 
     case application:get_env(heartbeat_interval) of
@@ -63,11 +68,12 @@ init([SessionId, MessageHandler, ConnectionReference]) ->
         _ ->
             infinity
     end,
+    {ok, EventMgr} = gen_event:start_link(),
     {ok, #state{
        session_id = SessionId,
-       message_handler = MessageHandler,
        connection_reference = ConnectionReference,
-       heartbeat_interval = HeartbeatInterval
+       heartbeat_interval = HeartbeatInterval,
+       event_manager = EventMgr
       }}.
 
 %%--------------------------------------------------------------------
@@ -86,21 +92,22 @@ init([SessionId, MessageHandler, ConnectionReference]) ->
 %%--------------------------------------------------------------------
 
 %% Websockets
-handle_call({websocket, _Data, _Ws} = Req, From, #state{ message_handler = Handler} = State) when is_atom(Handler)  ->
-    handle_call(Req, From, State#state{ message_handler = fun(P1, P2) -> Handler:handle_message(P1, P2) end });
-
-handle_call({websocket, Data, _Ws}, _From, #state{ message_handler = Handler, heartbeat_interval = Interval} = State) when is_function(Handler)  ->
+handle_call({websocket, Data, _Ws}, _From, #state{ heartbeat_interval = Interval, event_manager = EventManager } = State) ->
     Self = self(),
     spawn_link(fun () ->
                        socketio_data:parse(fun (Parser) -> socketio_data:string_reader(Parser, Data) end,
                                            fun (#heartbeat{}) ->
                                                    ignore; %% FIXME: we should actually reply
-                                               (M) -> Handler(Self, M) end)
+                                               (M) -> gen_event:notify(EventManager, {message, Self,  M}) end)
                end),
     {reply, ok, State, Interval};
 
 handle_call({websocket, _}, _From, State) ->
     {reply, ok, State};
+
+%% Event management
+handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
+    {reply, EventMgr, State};
 
 %% Flow control
 handle_call(stop, _From, State) ->
