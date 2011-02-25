@@ -1,4 +1,4 @@
--module(socketio_http).
+-module(socketio_client).
 -include_lib("socketio.hrl").
 -behaviour(gen_server).
 
@@ -12,9 +12,11 @@
 -define(SERVER, ?MODULE). 
 
 -record(state, {
-          default_http_handler,
+          session_id,
           message_handler,
-          sessions
+          connection_reference,
+          heartbeats = 0,
+          heartbeat_interval
          }).
 
 %%%===================================================================
@@ -28,11 +30,11 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Port, DefaultHttpHandler, MessageHandler) ->
-    gen_server:start_link(?MODULE, [Port, DefaultHttpHandler, MessageHandler], []).
+start_link(SessionId, MessageHandler, ConnectionReference) ->
+    gen_server:start_link(?MODULE, [SessionId, MessageHandler, ConnectionReference], []).
 
-start(Port, DefaultHttpHandler, MessageHandler) ->
-    supervisor:start_child(socketio_http_sup, [Port, DefaultHttpHandler, MessageHandler]).
+start(SessionId, MessageHandler, ConnectionReference) ->
+    supervisor:start_child(socketio_client_sup, [SessionId, MessageHandler, ConnectionReference]).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -49,18 +51,20 @@ start(Port, DefaultHttpHandler, MessageHandler) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Port, DefaultHttpHandler, MessageHandler]) ->
-    Self = self(),
-    process_flag(trap_exit, true),
-    misultin:start_link([{port, Port},
-                         {loop, fun (Req) -> handle_http(Self, Req) end},
-                         {ws_loop, fun (Ws) -> handle_websocket(Self, Ws) end},
-                         {ws_autoexit, false}
-                        ]),
+init([SessionId, MessageHandler, ConnectionReference]) ->
+    gen_server:cast(self(), hearbeat),
+    HeartbeatInterval = 
+    case application:get_env(heartbeat_interval) of
+        {ok, Time} ->
+            Time;
+        _ ->
+            infinity
+    end,
     {ok, #state{
-       default_http_handler = DefaultHttpHandler,
+       session_id = SessionId,
        message_handler = MessageHandler,
-       sessions = ets:new(socketio_sessions,[public])
+       connection_reference = ConnectionReference,
+       heartbeat_interval = HeartbeatInterval
       }}.
 
 %%--------------------------------------------------------------------
@@ -77,25 +81,27 @@ init([Port, DefaultHttpHandler, MessageHandler]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({request, {abs_path, "/socket.io.js"}, Req}, _From, State) ->
-    Response = Req:file(filename:join([filename:dirname(code:which(?MODULE)), "..", "priv", "Socket.IO", "socket.io.js"])),
-    {reply, Response, State};
 
-%% If we can't route it, let others deal with it
-handle_call({request, _, _} = Req, From, #state{ default_http_handler = HttpHandler } = State) when is_atom(HttpHandler) ->
-    handle_call(Req, From, State#state{ default_http_handler = fun(P1, P2) -> HttpHandler:handle_request(P1, P2) end });
+%% Websockets
+handle_call({websocket, _Data, _Ws} = Req, From, #state{ message_handler = Handler} = State) when is_atom(Handler)  ->
+    handle_call(Req, From, State#state{ message_handler = fun(P1, P2) -> Handler:handle_message(P1, P2) end });
 
-handle_call({request, Path, Req}, _From, #state{ default_http_handler = HttpHandler } = State) when is_function(HttpHandler) ->
-    Response = HttpHandler(Path, Req),
-    {reply, Response, State};
+handle_call({websocket, Data, _Ws}, _From, #state{ message_handler = Handler, heartbeat_interval = Interval} = State) when is_function(Handler)  ->
+    Self = self(),
+    spawn_link(fun () ->
+                       socketio_data:parse(fun (Parser) -> socketio_data:string_reader(Parser, Data) end,
+                                           fun (#heartbeat{}) ->
+                                                   ignore; %% FIXME: we should actually reply
+                                               (M) -> Handler(Self, M) end)
+               end),
+    {reply, ok, State, Interval};
 
-%% Sessions
-handle_call({session, generate, ConnectionReference}, _From, #state{ message_handler = MessageHandler, sessions = Sessions } = State) ->
-    UUID = binary_to_list(ossp_uuid:make(v4, text)),
-    {ok, Pid} = socketio_client:start(UUID, MessageHandler, ConnectionReference),
-    link(Pid),
-    ets:insert(Sessions, [{UUID, Pid}, {Pid, UUID}]),
-    {reply, {UUID, Pid}, State}.
+handle_call({websocket, _}, _From, State) ->
+    {reply, ok, State};
+
+%% Flow control
+handle_call(stop, _From, State) ->
+    {stop, shutdown, State}.
 
 
 %%--------------------------------------------------------------------
@@ -108,8 +114,16 @@ handle_call({session, generate, ConnectionReference}, _From, #state{ message_han
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+%% Send
+handle_cast({send, Message}, #state{ connection_reference = ConnectionReference, heartbeat_interval = Interval } = State) ->
+    handle_send(ConnectionReference, Message),
+    {noreply, State, Interval};
+
+handle_cast(hearbeat, #state{ connection_reference = ConnectionReference, heartbeats = Beats,
+                              heartbeat_interval = Interval } = State) ->
+    Beats1 = Beats + 1,
+    handle_send(ConnectionReference, #heartbeat{ index = Beats1 }),
+    {noreply, State#state { heartbeats = Beats1 }, Interval}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -121,16 +135,10 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({'EXIT', Pid, _}, #state{ sessions = Sessions } = State) ->
-    case ets:lookup(Sessions, Pid) of
-        [{Pid, UUID}] ->
-            ets:delete(Sessions,UUID),
-            ets:delete(Sessions,Pid);
-        _ ->
-            ignore
-    end,
+handle_info(timeout, State) ->
+    gen_server:cast(self(), hearbeat),
     {noreply, State};
-            
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -146,7 +154,6 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _State) ->
-    io:format("~p~n",[_Reason]),
     ok.
 
 %%--------------------------------------------------------------------
@@ -163,22 +170,5 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-handle_http(Server, Req) ->
-    gen_server:call(Server, {request, Req:get(uri), Req}).
-
-handle_websocket(Server, Ws) ->
-    {SessionID, Pid} = gen_server:call(Server, {session, generate, {websocket, Ws}}),
-    ok = gen_server:cast(Pid, {send, #msg{ content = SessionID }}),
-    handle_websocket(Server, Ws, SessionID, Pid).
-
-handle_websocket(Server, Ws, SessionID, Pid) ->
-    receive
-        {browser, Data} ->
-            gen_server:call(Pid, {websocket, Data, Ws}),
-            handle_websocket(Server, Ws, SessionID, Pid);
-        closed ->
-            gen_server:call(Pid, stop);
-        _Ignore ->
-            handle_websocket(Server, Ws, SessionID, Pid)
-    end.
-
+handle_send({websocket, Ws}, Message) ->
+    Ws:send(socketio_data:encode(Message)).
