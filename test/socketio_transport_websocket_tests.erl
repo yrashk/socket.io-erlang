@@ -1,4 +1,4 @@
--module(socketio_client_tests).
+-module(socketio_transport_websocket_tests).
 -include_lib("../include/socketio.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -behaviour(gen_event).
