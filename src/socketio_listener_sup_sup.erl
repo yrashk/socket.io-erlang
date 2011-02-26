@@ -1,4 +1,4 @@
--module(socketio_sup).
+-module(socketio_listener_sup_sup).
 
 -behaviour(supervisor).
 
@@ -23,9 +23,8 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, [
-                                  {socketio_listener_sup_sup, {socketio_listener_sup_sup, start_link, []}, 
-                                   permanent, infinity, supervisor, [socketio_listener_sup_sup]}
-
+    {ok, { {simple_one_for_one, 5, 10}, [
+                                  {socketio_listener_sup, {socketio_listener_sup, start_link, []}, 
+                                   permanent, infinity, supervisor, [socketio_listener_sup]}
                                  ]} }.
 

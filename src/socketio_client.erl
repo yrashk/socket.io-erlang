@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2, start/2]).
+-export([start_link/2, start/3]).
 -export([event_manager/1, send/2, session_id/1]).
 
 %% gen_server callbacks
@@ -35,8 +35,10 @@
 start_link(SessionId, ConnectionReference) ->
     gen_server:start_link(?MODULE, [SessionId, ConnectionReference], []).
 
-start(SessionId, ConnectionReference) ->
-    supervisor:start_child(socketio_client_sup, [SessionId, ConnectionReference]).
+start(Sup0, SessionId, ConnectionReference) ->
+    Children = supervisor:which_children(Sup0),
+    {Sup, _, _, _} = lists:keyfind(socketio_client_sup,1, Children),
+    supervisor:start_child(Sup, [SessionId, ConnectionReference]).
 
 send(Server, Message) ->
     gen_server:cast(Server, {send, Message}).

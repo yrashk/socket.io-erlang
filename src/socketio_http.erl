@@ -3,8 +3,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2, start/2]).
--export([event_manager/1]).
+-export([start_link/4]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -15,7 +14,8 @@
 -record(state, {
           default_http_handler,
           sessions,
-          event_manager
+          event_manager,
+          sup
          }).
 
 %%%===================================================================
@@ -29,14 +29,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Port, DefaultHttpHandler) ->
-    gen_server:start_link(?MODULE, [Port, DefaultHttpHandler], []).
-
-start(Port, DefaultHttpHandler) ->
-    supervisor:start_child(socketio_http_sup, [Port, DefaultHttpHandler]).
-
-event_manager(Server) ->
-    gen_server:call(Server, event_manager).
+start_link(Port, DefaultHttpHandler, EventManager, Sup) ->
+    gen_server:start_link(?MODULE, [Port, DefaultHttpHandler, EventManager, Sup], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -53,7 +47,7 @@ event_manager(Server) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Port, DefaultHttpHandler]) ->
+init([Port, DefaultHttpHandler, EventManager, Sup]) ->
     Self = self(),
     process_flag(trap_exit, true),
     misultin:start_link([{port, Port},
@@ -61,11 +55,11 @@ init([Port, DefaultHttpHandler]) ->
                          {ws_loop, fun (Ws) -> handle_websocket(Self, Ws) end},
                          {ws_autoexit, false}
                         ]),
-    {ok, EventMgr} = gen_event:start_link(),
     {ok, #state{
        default_http_handler = DefaultHttpHandler,
        sessions = ets:new(socketio_sessions,[public]),
-       event_manager = EventMgr
+       event_manager = EventManager,
+       sup = Sup
       }}.
 
 %%--------------------------------------------------------------------
@@ -100,11 +94,13 @@ handle_call({request, Path, Req}, _From, #state{ default_http_handler = HttpHand
     {reply, Response, State};
 
 %% Sessions
-handle_call({session, generate, ConnectionReference}, _From, #state{ sessions = Sessions,
-                                                                     event_manager = EventManager
-                                                                   } = State) ->
+handle_call({session, generate, ConnectionReference}, _From, #state{ 
+                                                        sup = Sup,
+                                                        sessions = Sessions,
+                                                        event_manager = EventManager
+                                                       } = State) ->
     UUID = binary_to_list(ossp_uuid:make(v4, text)),
-    {ok, Pid} = socketio_client:start(UUID, ConnectionReference),
+    {ok, Pid} = socketio_client:start(Sup, UUID, ConnectionReference),
     link(Pid),
     ets:insert(Sessions, [{UUID, Pid}, {Pid, UUID}]),
     gen_event:notify(EventManager, {client, Pid}),

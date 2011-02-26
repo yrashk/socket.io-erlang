@@ -37,8 +37,8 @@ socketio_client_websocket_test_() ->
           fun () ->
                   error_logger:delete_report_handler(error_logger_tty_h), %% suppress annoying kernel logger
                   application:start(socketio),
-                  {ok, Pid} = socketio_http:start(8989, ?MODULE),
-                  EventMgr = socketio_http:event_manager(Pid),
+                  {ok, _Pid, EventMgr} = socketio_listener:start([{http_port, 8989}, 
+                                                                  {default_http_handler, ?MODULE}]),
                   ok = gen_event:add_handler(EventMgr, ?MODULE,[self()]),
                   ?cmd("open -a \"Google Chrome\" http://localhost:8989/"), %% FIXME: will only work on OSX
                   receive

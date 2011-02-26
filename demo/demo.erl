@@ -8,8 +8,8 @@
 main(_) ->
     application:start(sasl),
     application:start(socketio),
-    {ok, Pid} = socketio_http:start(7878, ?MODULE),
-    EventMgr = socketio_http:event_manager(Pid),
+    {ok, _Pid, EventMgr} = socketio_listener:start([{http_port, 7878}, 
+                                                   {default_http_handler,?MODULE}]),
     ok = gen_event:add_handler(EventMgr, ?MODULE,[]),
     receive _ -> ok end.
 
