@@ -4,7 +4,7 @@
 
 %% API
 -export([start_link/2, start/2]).
--export([event_manager/1, send/2]).
+-export([event_manager/1, send/2, session_id/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -43,6 +43,9 @@ send(Server, Message) ->
 
 event_manager(Server) ->
     gen_server:call(Server, event_manager).
+
+session_id(Server) ->
+    gen_server:call(Server, session_id).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -109,6 +112,11 @@ handle_call({websocket, _}, _From, State) ->
 %% Event management
 handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
     {reply, EventMgr, State};
+
+%% Sessions
+
+handle_call(session_id, _From, #state{ session_id = SessionId } = State) ->
+    {reply, SessionId, State};
 
 %% Flow control
 handle_call(stop, _From, State) ->
