@@ -180,7 +180,6 @@ handle_http(Server, Req) ->
 
 handle_websocket(Server, Ws) ->
     {SessionID, Pid} = gen_server:call(Server, {session, generate, {websocket, Ws}}),
-    ok = gen_server:cast(Pid, {send, #msg{ content = SessionID }}),
     handle_websocket(Server, Ws, SessionID, Pid).
 
 handle_websocket(Server, Ws, SessionID, Pid) ->

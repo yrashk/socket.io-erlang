@@ -60,7 +60,6 @@ event_manager(Server) ->
 %% @end
 %%--------------------------------------------------------------------
 init([SessionId, ConnectionReference]) ->
-    gen_server:cast(self(), hearbeat),
     HeartbeatInterval = 
     case application:get_env(heartbeat_interval) of
         {ok, Time} ->
@@ -69,6 +68,8 @@ init([SessionId, ConnectionReference]) ->
             infinity
     end,
     {ok, EventMgr} = gen_event:start_link(),
+    send(self(), #msg{ content = SessionId }),
+    gen_server:cast(self(), hearbeat),
     {ok, #state{
        session_id = SessionId,
        connection_reference = ConnectionReference,
