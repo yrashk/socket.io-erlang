@@ -86,6 +86,11 @@ handle_call({request, {abs_path, "/socket.io.js"}, Req}, _From, State) ->
     Response = Req:file(filename:join([filename:dirname(code:which(?MODULE)), "..", "priv", "Socket.IO", "socket.io.js"])),
     {reply, Response, State};
 
+handle_call({request, {abs_path, "/socket.io/lib/vendor/web-socket-js/WebSocketMain.swf"}, Req}, _From, State) ->
+    Response = Req:file(filename:join([filename:dirname(code:which(?MODULE)), "..", "priv", "Socket.IO", "lib", "vendor", "web-socket-js", "WebSocketMain.swf"])),
+    {reply, Response, State};
+
+
 %% If we can't route it, let others deal with it
 handle_call({request, _, _} = Req, From, #state{ default_http_handler = HttpHandler } = State) when is_atom(HttpHandler) ->
     handle_call(Req, From, State#state{ default_http_handler = fun(P1, P2) -> HttpHandler:handle_request(P1, P2) end });
