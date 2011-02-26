@@ -94,13 +94,13 @@ handle_call({request, Path, Req}, _From, #state{ default_http_handler = HttpHand
     {reply, Response, State};
 
 %% Sessions
-handle_call({session, generate, ConnectionReference}, _From, #state{ 
-                                                        sup = Sup,
-                                                        sessions = Sessions,
-                                                        event_manager = EventManager
-                                                       } = State) ->
+handle_call({session, generate, ConnectionReference, Transport}, _From, #state{ 
+                                                                   sup = Sup,
+                                                                   sessions = Sessions,
+                                                                   event_manager = EventManager
+                                                                  } = State) ->
     UUID = binary_to_list(ossp_uuid:make(v4, text)),
-    {ok, Pid} = socketio_client:start(Sup, UUID, ConnectionReference),
+    {ok, Pid} = socketio_client:start(Sup, Transport, UUID, ConnectionReference),
     link(Pid),
     ets:insert(Sessions, [{UUID, Pid}, {Pid, UUID}]),
     gen_event:notify(EventManager, {client, Pid}),
@@ -180,7 +180,7 @@ handle_http(Server, Req) ->
     gen_server:call(Server, {request, Req:get(uri), Req}).
 
 handle_websocket(Server, Ws) ->
-    {SessionID, Pid} = gen_server:call(Server, {session, generate, {websocket, Ws}}),
+    {SessionID, Pid} = gen_server:call(Server, {session, generate, {websocket, Ws}, socketio_transport_websocket}),
     handle_websocket(Server, Ws, SessionID, Pid).
 
 handle_websocket(Server, Ws, SessionID, Pid) ->
@@ -193,4 +193,3 @@ handle_websocket(Server, Ws, SessionID, Pid) ->
         _Ignore ->
             handle_websocket(Server, Ws, SessionID, Pid)
     end.
-
