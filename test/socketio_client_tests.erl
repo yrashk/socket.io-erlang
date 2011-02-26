@@ -40,7 +40,7 @@ socketio_client_websocket_test_() ->
                   {ok, _Pid, EventMgr} = socketio_listener:start([{http_port, 8989}, 
                                                                   {default_http_handler, ?MODULE}]),
                   ok = gen_event:add_handler(EventMgr, ?MODULE,[self()]),
-                  ?cmd("open -a \"Google Chrome\" http://localhost:8989/"), %% FIXME: will only work on OSX
+                  ?cmd("open -a \"Google Chrome\" -g http://localhost:8989/"), %% FIXME: will only work on OSX
                   receive
                       {connected, Client, EM} -> 
                           {Client, EM}
