@@ -1,9 +1,9 @@
 -module(socketio_http).
--include_lib("socketio.hrl").
+-include_lib("../include/socketio.hrl").
 -behaviour(gen_server).
 
 %% API
--export([start_link/3]).
+-export([start_link/4]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -29,8 +29,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Port, DefaultHttpHandler, Sup) ->
-    gen_server:start_link(?MODULE, [Port, DefaultHttpHandler, Sup], []).
+start_link(Port, Resource, DefaultHttpHandler, Sup) ->
+    gen_server:start_link(?MODULE, [Port, Resource, DefaultHttpHandler, Sup], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -47,12 +47,12 @@ start_link(Port, DefaultHttpHandler, Sup) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Port, DefaultHttpHandler, Sup]) ->
+init([Port, Resource, DefaultHttpHandler, Sup]) ->
     Self = self(),
     process_flag(trap_exit, true),
     misultin:start_link([{port, Port},
-                         {loop, fun (Req) -> handle_http(Self, Req) end},
-                         {ws_loop, fun (Ws) -> handle_websocket(Self, Ws) end},
+                         {loop, fun (Req) -> handle_http(Self, Resource, Req) end},
+                         {ws_loop, fun (Ws) -> handle_websocket(Self, Resource, Ws) end},
                          {ws_autoexit, false}
                         ]),
     gen_server:cast(Self, acquire_event_manager),
@@ -76,21 +76,25 @@ init([Port, DefaultHttpHandler, Sup]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({request, {abs_path, "/socket.io.js"}, Req}, _From, State) ->
+handle_call({socketio_request, 'GET', [_, "socket.io.js"], Req}, _From, State) ->
     Response = Req:file(filename:join([filename:dirname(code:which(?MODULE)), "..", "priv", "Socket.IO", "socket.io.js"])),
     {reply, Response, State};
 
-handle_call({request, {abs_path, "/socket.io/lib/vendor/web-socket-js/WebSocketMain.swf"}, Req}, _From, State) ->
+handle_call({socketio_request, 'GET', [_, "lib", "vendor", "web-socket-js", "WebSocketMain.swf"], Req}, _From, State) ->
     Response = Req:file(filename:join([filename:dirname(code:which(?MODULE)), "..", "priv", "Socket.IO", "lib", "vendor", "web-socket-js", "WebSocketMain.swf"])),
     {reply, Response, State};
 
+%% Not a valid Socket.IO request
+handle_call({socketio_request, _, _, Req}, _From, State) ->
+    Response = Req:respond(404),
+    {reply, Response, State};
 
 %% If we can't route it, let others deal with it
-handle_call({request, _, _} = Req, From, #state{ default_http_handler = HttpHandler } = State) when is_atom(HttpHandler) ->
-    handle_call(Req, From, State#state{ default_http_handler = fun(P1, P2) -> HttpHandler:handle_request(P1, P2) end });
+handle_call({request, _Method, _Path, _Req} = Req, From, #state{ default_http_handler = HttpHandler } = State) when is_atom(HttpHandler) ->
+    handle_call(Req, From, State#state{ default_http_handler = fun(P1, P2, P3) -> HttpHandler:handle_request(P1, P2, P3) end });
 
-handle_call({request, Path, Req}, _From, #state{ default_http_handler = HttpHandler } = State) when is_function(HttpHandler) ->
-    Response = HttpHandler(Path, Req),
+handle_call({request, Method, Path, Req}, _From, #state{ default_http_handler = HttpHandler } = State) when is_function(HttpHandler) ->
+    Response = HttpHandler(Method, Path, Req),
     {reply, Response, State};
 
 %% Sessions
@@ -180,12 +184,25 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-handle_http(Server, Req) ->
-    gen_server:call(Server, {request, Req:get(uri), Req}).
+handle_http(Server, Resource, Req) ->
+    Path = Req:resource([lowercase, urldecode]),
+    case Path of
+	[] ->
+	    gen_server:call(Server, {request, Req:get(method), Path, Req});
+	_ when hd(Path) =:= Resource ->
+	    gen_server:call(Server, {socketio_request, Req:get(method), Path, Req});
+	_ ->
+	    gen_server:call(Server, {request, Req:get(method), Path, Req})
+	end.
 
-handle_websocket(Server, Ws) ->
-    {SessionID, Pid} = gen_server:call(Server, {session, generate, {websocket, Ws}, socketio_transport_websocket}),
-    handle_websocket(Server, Ws, SessionID, Pid).
+handle_websocket(Server, Resource, Ws) ->
+    ValidPath = "/" ++ Resource ++ "/websocket",
+    case Ws:get(path) of
+	ValidPath ->
+	    {SessionID, Pid} = gen_server:call(Server, {session, generate, {websocket, Ws}, socketio_transport_websocket}),
+	    handle_websocket(Server, Ws, SessionID, Pid);
+	_ -> void %% FIXME: Maybe provide a default websocket handler for non-Socket.IO connections?
+    end.
 
 handle_websocket(Server, Ws, SessionID, Pid) ->
     receive

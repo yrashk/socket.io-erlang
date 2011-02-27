@@ -3,7 +3,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -behaviour(gen_event).
 -export([init/1, handle_event/2, handle_call/2, handle_info/2, terminate/2, code_change/3]).
--export([handle_request/2]).
+-export([handle_request/3]).
 -export([transport_tests/1]).
 
 t_echoes_string({Client, EventMgr}) ->
@@ -63,7 +63,7 @@ transport_tests(Transport) ->
            end]}}.
 
 
-handle_request({abs_path, "/"}, Req) ->
+handle_request('GET', [], Req) ->
     Transports = 
         case ets:lookup(socketio_tests, transport) of
             [{transport, Transport}] ->
@@ -72,7 +72,7 @@ handle_request({abs_path, "/"}, Req) ->
                 ""
         end,
     Req:ok([{"Content-Type", "text/html"}], 
-           "<html><head><script src=\"/socket.io.js\"></script>"
+           "<html><head><script src=\"/socket.io/socket.io.js\"></script>"
            "<script type=\"text/javascript\">"
            "function init() { \n"
            "socket = new io.Socket('localhost', {" ++ Transports ++ ", rememberTransport: false});\n"
@@ -91,7 +91,7 @@ handle_request({abs_path, "/"}, Req) ->
            "</script>"
            "</head><body onLoad=\"init()\"></body></html>");
 
-handle_request({abs_path, _Path}, Req) ->
+handle_request(_, _, Req) ->
     Req:respond(200).
 
 %% gen_event

@@ -49,7 +49,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 %%
 
-handle_request({abs_path, "/"}, Req) ->
+handle_request('GET', [], Req) ->
     Req:file(filename:join([filename:dirname(code:which(?MODULE)), "index.html"]));
-handle_request({abs_path, _Path}, Req) ->
+handle_request(_Method, _Path, Req) ->
     Req:respond(200).
