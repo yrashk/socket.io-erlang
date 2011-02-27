@@ -25,17 +25,20 @@ start_link(Options) ->
 init([Options]) ->
     HttpPort = proplists:get_value(http_port, Options, 80),
     DefaultHttpHandler = proplists:get_value(default_http_handler, Options),
-    {ok, EventMgr} = gen_event:start_link(),
-    put(event_manager, EventMgr), %% this is ok because it is a write-once value
     {ok, { {one_for_one, 5, 10}, [
+                                  {socketio_listener_event_manager, {gen_event, start_link, []},
+                                   permanent, 5000, worker, [gen_event]},
+
+                                  {socketio_listener, {socketio_listener, start_link, [self()]},
+                                   permanent, 5000, worker, [socketio_listener]},
+
                                   {socketio_http, {socketio_http, start_link, [HttpPort,
                                                                                DefaultHttpHandler,
-                                                                               EventMgr,
                                                                                self()]}, 
                                    permanent, 5000, worker, [socketio_http]},
+
                                   {socketio_client_sup, {socketio_client_sup, start_link, []}, 
                                    permanent, infinity, supervisor, [socketio_client_sup]}
-
 
                                  ]} }.
 

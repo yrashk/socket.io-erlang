@@ -6,10 +6,12 @@
 -behaviour(gen_event).
 
 main(_) ->
+    appmon:start(),
     application:start(sasl),
     application:start(socketio),
-    {ok, _Pid, EventMgr} = socketio_listener:start([{http_port, 7878}, 
-                                                   {default_http_handler,?MODULE}]),
+    {ok, Pid} = socketio_listener:start([{http_port, 7878}, 
+                                         {default_http_handler,?MODULE}]),
+    EventMgr = socketio_listener:event_manager(Pid),
     ok = gen_event:add_handler(EventMgr, ?MODULE,[]),
     receive _ -> ok end.
 

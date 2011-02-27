@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/4]).
+-export([start_link/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -29,8 +29,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Port, DefaultHttpHandler, EventManager, Sup) ->
-    gen_server:start_link(?MODULE, [Port, DefaultHttpHandler, EventManager, Sup], []).
+start_link(Port, DefaultHttpHandler, Sup) ->
+    gen_server:start_link(?MODULE, [Port, DefaultHttpHandler, Sup], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -47,7 +47,7 @@ start_link(Port, DefaultHttpHandler, EventManager, Sup) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Port, DefaultHttpHandler, EventManager, Sup]) ->
+init([Port, DefaultHttpHandler, Sup]) ->
     Self = self(),
     process_flag(trap_exit, true),
     misultin:start_link([{port, Port},
@@ -55,10 +55,10 @@ init([Port, DefaultHttpHandler, EventManager, Sup]) ->
                          {ws_loop, fun (Ws) -> handle_websocket(Self, Ws) end},
                          {ws_autoexit, false}
                         ]),
+    gen_server:cast(Self, acquire_event_manager),
     {ok, #state{
        default_http_handler = DefaultHttpHandler,
        sessions = ets:new(socketio_sessions,[public]),
-       event_manager = EventManager,
        sup = Sup
       }}.
 
@@ -121,6 +121,10 @@ handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast(acquire_event_manager, #state{ sup = Sup } = State) ->
+    EventManager = socketio_listener:event_manager(socketio_listener:server(Sup)),
+    {noreply, State#state{ event_manager = EventManager }};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 

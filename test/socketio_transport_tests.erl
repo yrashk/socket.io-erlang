@@ -39,8 +39,9 @@ transport_tests(Transport) ->
                   ets:insert(socketio_tests, {transport, Transport}),
                   error_logger:delete_report_handler(error_logger_tty_h), %% suppress annoying kernel logger
                   application:start(socketio),
-                  {ok, _Pid, EventMgr} = socketio_listener:start([{http_port, 8989}, 
-                                                                  {default_http_handler, ?MODULE}]),
+                  {ok, Pid} = socketio_listener:start([{http_port, 8989}, 
+                                                       {default_http_handler, ?MODULE}]),
+                  EventMgr = socketio_listener:event_manager(Pid),
                   ok = gen_event:add_handler(EventMgr, ?MODULE,[self()]),
                   ?cmd("open -a \"Google Chrome\" -g http://localhost:8989/"), %% FIXME: will only work on OSX
                   receive
