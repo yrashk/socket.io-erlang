@@ -2,8 +2,8 @@
 -behaviour(gen_server).
 %% API
 -export([start/1, server/1]).
--export([start_link/1]).
--export([event_manager/1]).
+-export([start_link/2]).
+-export([event_manager/1, origins/1, origins/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -11,7 +11,8 @@
 
 
 -record(state, {
-          sup
+          sup,
+          origins
          }).
 
 %%%===================================================================
@@ -36,11 +37,17 @@ server(Sup) ->
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Sup) ->
-    gen_server:start_link(?MODULE, [Sup], []).
+start_link(Sup, Origins) ->
+    gen_server:start_link(?MODULE, [Sup, Origins], []).
 
 event_manager(Server) ->
     gen_server:call(Server, event_manager).
+
+origins(Server) ->
+    gen_server:call(Server, origins).
+
+origins(Server, Origins) ->
+    gen_server:call(Server, {origins, Origins}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -57,9 +64,10 @@ event_manager(Server) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Sup]) ->
+init([Sup, Origins]) ->
     {ok, #state{
-       sup = Sup
+       sup = Sup,
+       origins = Origins
       }}.
 
 %%--------------------------------------------------------------------
@@ -77,6 +85,13 @@ init([Sup]) ->
 %% @end
 %%--------------------------------------------------------------------
 
+%% Origins
+handle_call(origins, _From, #state{ origins = Origins } = State) ->
+    {reply, Origins, State};
+
+handle_call({origins, Origins}, _From,State) ->
+    {reply, Origins, State#state{ origins = Origins }};
+            
 %% Event management
 handle_call(event_manager, _From, #state{ sup = Sup } = State) ->
     Children = supervisor:which_children(Sup),
