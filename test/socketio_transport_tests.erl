@@ -50,7 +50,8 @@ transport_tests(Transport) ->
           end,
           fun ({Client, _}) ->
                   socketio_client:send(Client, #msg{ content = "socketio_close" }),
-                  application:stop(socketio)
+                  application:stop(socketio),
+                  ets:delete(socketio_tests)
           end,
           [fun (P) ->
                    [
@@ -73,7 +74,7 @@ handle_request({abs_path, "/"}, Req) ->
            "<html><head><script src=\"/socket.io.js\"></script>"
            "<script type=\"text/javascript\">"
            "function init() { \n"
-           "socket = new io.Socket('localhost', {" ++ Transports ++ "});\n"
+           "socket = new io.Socket('localhost', {" ++ Transports ++ ", rememberTransport: false});\n"
            
            "socket.on('message',function(data){\n"
            "if (data=='socketio_close') { window.close(); }\n"
