@@ -97,7 +97,7 @@ handle_call({request, 'GET', [_Random, SessionId, "xhr-polling"|Resource], Req }
 	[[Pid]] -> 
 	    gen_server:cast(Pid, {'xhr-polling', polling_request, Req, From});
 	_ ->
-	    Req:ok(404, "")
+	    gen_server:reply(From, Req:ok(404, ""))
     end,
     {noreply, State};
 
