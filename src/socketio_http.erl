@@ -93,22 +93,23 @@ handle_call({request, 'GET', [_Random, "xhr-polling"|Resource], Req }, _From, #s
 
 %% Returning XHR Polling
 handle_call({request, 'GET', [_Random, SessionId, "xhr-polling"|Resource], Req }, From, #state{ resource = Resource, sessions = Sessions } = State) ->
-    case ets:match(Sessions, {SessionId, '$1'}) of
-	[[Pid]] -> 
-	    gen_server:cast(Pid, {'xhr-polling', polling_request, Req, From});
-	_ ->
-	    gen_server:reply(From, Req:ok(404, ""))
+    case ets:lookup(Sessions, SessionId) of
+        [{SessionId, Pid}] -> 
+            gen_server:cast(Pid, {'xhr-polling', polling_request, Req, From});
+        _ ->
+            gen_server:reply(From, Req:ok(404, ""))
     end,
     {noreply, State};
 
 %% Incoming XHR Polling data
 handle_call({request, 'POST', ["send", SessionId, "xhr-polling"|Resource], Req }, _From, #state{ resource = Resource, sessions = Sessions } = State) ->
-    Response = case ets:match(Sessions, {SessionId, '$1'}) of
-		   [[Pid]] ->
-		       gen_server:call(Pid, {'xhr-polling', data, Req});
-		   _ ->
-		       Req:ok(404, "")
-	       end,
+    Response =  
+        case ets:lookup(Sessions, SessionId) of
+            [{SessionId, Pid}] -> 
+                gen_server:call(Pid, {'xhr-polling', data, Req});
+            _ ->
+                Req:ok(404, "")
+        end,
     {reply, Response, State};
 
 %% If we can't route it, let others deal with it
