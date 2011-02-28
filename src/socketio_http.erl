@@ -87,6 +87,30 @@ handle_call({request, 'GET', ["WebSocketMain.swf", "web-socket-js", "vendor", "l
     Response = Req:file(filename:join([filename:dirname(code:which(?MODULE)), "..", "priv", "Socket.IO", "lib", "vendor", "web-socket-js", "WebSocketMain.swf"])),
     {reply, Response, State};
 
+%% New XHR Polling request
+handle_call({request, 'GET', [_Random, "xhr-polling"|Resource], Req }, _From, #state{ resource = Resource} = State) ->
+    handle_call({session, generate, {'xhr-polling', Req}, socketio_transport_xhr_polling}, _From, State);
+
+%% Returning XHR Polling
+handle_call({request, 'GET', [_Random, SessionId, "xhr-polling"|Resource], Req }, From, #state{ resource = Resource, sessions = Sessions } = State) ->
+    case ets:match(Sessions, {SessionId, '$1'}) of
+	[[Pid]] -> 
+	    gen_server:cast(Pid, {'xhr-polling', polling_request, Req, From});
+	_ ->
+	    Req:ok(404, "")
+    end,
+    {noreply, State};
+
+%% Incoming XHR Polling data
+handle_call({request, 'POST', ["send", SessionId, "xhr-polling"|Resource], Req }, _From, #state{ resource = Resource, sessions = Sessions } = State) ->
+    Response = case ets:match(Sessions, {SessionId, '$1'}) of
+		   [[Pid]] ->
+		       gen_server:call(Pid, {'xhr-polling', data, Req});
+		   _ ->
+		       Req:ok(404, "")
+	       end,
+    {reply, Response, State};
+
 %% If we can't route it, let others deal with it
 handle_call({request, _Method, _Path, _Req} = Req, From, #state{ default_http_handler = HttpHandler } = State) when is_atom(HttpHandler) ->
     handle_call(Req, From, State#state{ default_http_handler = fun(P1, P2, P3) -> HttpHandler:handle_request(P1, P2, P3) end });
@@ -184,7 +208,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 handle_http(Server, Req) ->
     Path = Req:resource([urldecode]),
-    gen_server:call(Server, {request, Req:get(method), lists:reverse(Path), Req}).
+    gen_server:call(Server, {request, Req:get(method), lists:reverse(Path), Req}, infinity).
 
 handle_websocket(Server, Resource, Ws) ->
     WsPath = Ws:get(path),
