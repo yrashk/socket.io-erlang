@@ -80,7 +80,7 @@ handle_call({socketio_request, 'GET', [_, "socket.io.js"], Req}, _From, State) -
     Response = Req:file(filename:join([filename:dirname(code:which(?MODULE)), "..", "priv", "Socket.IO", "socket.io.js"])),
     {reply, Response, State};
 
-handle_call({socketio_request, 'GET', [_, "lib", "vendor", "web-socket-js", "WebSocketMain.swf"], Req}, _From, State) ->
+handle_call({socketio_request, 'GET', [_, "lib", "vendor", "web-socket-js", "websocketmain.swf"], Req}, _From, State) ->
     Response = Req:file(filename:join([filename:dirname(code:which(?MODULE)), "..", "priv", "Socket.IO", "lib", "vendor", "web-socket-js", "WebSocketMain.swf"])),
     {reply, Response, State};
 
