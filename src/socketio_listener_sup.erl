@@ -25,7 +25,7 @@ start_link(Options) ->
 init([Options]) ->
     HttpPort = proplists:get_value(http_port, Options, 80),
     DefaultHttpHandler = proplists:get_value(default_http_handler, Options),
-    Resource = proplists:get_value(resource, Options, "socket.io"),
+    Resource = lists:reverse(string:tokens(proplists:get_value(resource, Options, "socket.io"),"/")),
     Origins = proplists:get_value(origins,[{any, any}]),
     {ok, { {one_for_one, 5, 10}, [
                                   {socketio_listener_event_manager, {gen_event, start_link, []},
