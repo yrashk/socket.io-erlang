@@ -94,12 +94,13 @@ handle_call({'xhr-polling', data, Req}, _From, #state{ close_timeout = _ServerTi
     Data = Req:parse_post(),
     Self = self(),
     lists:foreach(fun({"data", M}) ->
-			  spawn_link(fun () ->
-					     socketio_data:parse(fun (Parser) -> socketio_data:string_reader(Parser, M) end,
-								 fun (#heartbeat{}) -> ignore;
-								     (M0) -> gen_event:notify(EventManager, {message, Self,  M0}) end)
-				     end)
-		  end, Data),
+        spawn_link(fun () ->
+            F = fun(#heartbeat{}) -> ignore;
+                   (M0) -> gen_event:notify(EventManager, {message, Self,  M0})
+            end,
+            F(socketio_data:decode(#msg{content=M}))
+        end)
+    end, Data),
     Response = send_message("ok", Req),
     {reply, Response, State};
 

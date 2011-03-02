@@ -85,12 +85,12 @@ init([SessionId, ConnectionReference]) ->
 %% Websockets
 handle_call({websocket, Data, _Ws}, _From, #state{ heartbeat_interval = Interval, event_manager = EventManager } = State) ->
     Self = self(),
-    spawn_link(fun () ->
-                       socketio_data:parse(fun (Parser) -> socketio_data:string_reader(Parser, Data) end,
-                                           fun (#heartbeat{}) ->
-                                                   ignore; %% FIXME: we should actually reply
-                                               (M) -> gen_event:notify(EventManager, {message, Self,  M}) end)
-               end),
+    spawn_link(fun() ->
+        F = fun (#heartbeat{}) -> ignore; %% FIXME: we should actually reply
+                (M) -> gen_event:notify(EventManager, {message, Self,  M})
+        end,
+        F(socketio_data:decode(#msg{content=Data}))
+    end),
     {reply, ok, State, Interval};
 
 handle_call({websocket, _}, _From, State) ->
