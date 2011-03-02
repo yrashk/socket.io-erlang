@@ -130,7 +130,6 @@ handle_call(stop, _From, State) ->
 handle_cast({ 'xhr-polling', polling_request, Req, Server}, #state { close_timeout = _ServerTimeout, polling_duration = Interval, message_buffer = [] } = State) ->
     XhrLoop = spawn_link(fun() -> xhr_loop(Req, Server, Interval) end),
     link(Req:get(socket)),
-    io:format("~p~n", [inet:getopts(Req:get(socket), [keepalive, send_timeout_close])]),
     {noreply, State#state{ connection_reference = {'xhr-polling', XhrLoop} }};
 
 handle_cast({'xhr-polling', polling_request, Req, Server}, #state { close_timeout = _ServerTimeout, message_buffer = Buffer } = State) ->
@@ -160,7 +159,6 @@ handle_cast(_, #state{ close_timeout = _ServerTimeout } = State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({'EXIT',_Pid,_Reason}, #state{ close_timeout = ServerTimeout} = State) ->
-    io:format("~p~n", [{_Pid, _Reason}]),
     {noreply, State#state { connection_reference = {'xhr-polling', none}}, ServerTimeout};
 
 %% Client has timed out
