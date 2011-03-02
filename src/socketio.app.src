@@ -3,7 +3,7 @@
   {description, ""},
   {vsn, "1"},
   {registered, []},
-  {agner, [{requires, ["misultin","ossp_uuid","jsx"]}]},
+  {agner, [{requires, [{"misultin","@tcp-closed-patch"},"ossp_uuid","jsx"]}]},
   {applications, [
                   kernel,
                   stdlib
