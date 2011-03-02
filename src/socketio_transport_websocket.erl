@@ -59,7 +59,7 @@ init([SessionId, ConnectionReference]) ->
     end,
     {ok, EventMgr} = gen_event:start_link(),
     socketio_client:send(self(), #msg{ content = SessionId }),
-    gen_server:cast(self(), hearbeat),
+    gen_server:cast(self(), heartbeat),
     {ok, #state{
        session_id = SessionId,
        connection_reference = ConnectionReference,
@@ -125,7 +125,7 @@ handle_cast({send, Message}, #state{ connection_reference = ConnectionReference,
     handle_send(ConnectionReference, Message),
     {noreply, State, Interval};
 
-handle_cast(hearbeat, #state{ connection_reference = ConnectionReference, heartbeats = Beats,
+handle_cast(heartbeat, #state{ connection_reference = ConnectionReference, heartbeats = Beats,
                               heartbeat_interval = Interval } = State) ->
     Beats1 = Beats + 1,
     handle_send(ConnectionReference, #heartbeat{ index = Beats1 }),
@@ -142,7 +142,7 @@ handle_cast(hearbeat, #state{ connection_reference = ConnectionReference, heartb
 %% @end
 %%--------------------------------------------------------------------
 handle_info(timeout, State) ->
-    gen_server:cast(self(), hearbeat),
+    gen_server:cast(self(), heartbeat),
     {noreply, State};
 
 handle_info(_Info, State) ->
