@@ -50,6 +50,7 @@ start_link(SessionId, ConnectionReference) ->
 %% @end
 %%--------------------------------------------------------------------
 init([SessionId, {'xhr-polling', Req}]) ->
+    process_flag(trap_exit, true),
     PollingDuration = 
     case application:get_env(xhr_polling_duration) of
         {ok, Time} ->
@@ -128,7 +129,8 @@ handle_call(stop, _From, State) ->
 %% Polling
 handle_cast({ 'xhr-polling', polling_request, Req, Server}, #state { close_timeout = _ServerTimeout, polling_duration = Interval, message_buffer = [] } = State) ->
     XhrLoop = spawn_link(fun() -> xhr_loop(Req, Server, Interval) end),
-    monitor(process, XhrLoop),
+    link(Req:get(socket)),
+    io:format("~p~n", [inet:getopts(Req:get(socket), [keepalive, send_timeout_close])]),
     {noreply, State#state{ connection_reference = {'xhr-polling', XhrLoop} }};
 
 handle_cast({'xhr-polling', polling_request, Req, Server}, #state { close_timeout = _ServerTimeout, message_buffer = Buffer } = State) ->
@@ -157,7 +159,8 @@ handle_cast(_, #state{ close_timeout = _ServerTimeout } = State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({'DOWN', _, process, _, _}, #state{ close_timeout = ServerTimeout} = State) ->
+handle_info({'EXIT',_Pid,_Reason}, #state{ close_timeout = ServerTimeout} = State) ->
+    io:format("~p~n", [{_Pid, _Reason}]),
     {noreply, State#state { connection_reference = {'xhr-polling', none}}, ServerTimeout};
 
 %% Client has timed out
@@ -214,11 +217,11 @@ send_message(Message, Req) ->
 	       {"Connection", "keep-alive"}],
     Headers0 = case proplists:get_value('Referer', Req:get(headers)) of
 		  undefined -> Headers;
-		  Origin -> lists:append(Headers, [{"Access-Control-Allow-Origin", Origin}])
+		  Origin -> [{"Access-Control-Allow-Origin", Origin}|Headers]
 	      end,
     Headers1 = case proplists:get_value('Cookie', Req:get(headers)) of
 		   undefined -> Headers0;
-		   _Cookie -> lists:append(Headers0, [{"Access-Control-Allow-Credentials", "true"}])
+		   _Cookie -> [{"Access-Control-Allow-Credentials", "true"}|Headers0]
 	       end,
     Req:ok(Headers1, Message).
 
