@@ -135,24 +135,24 @@ handle_call(stop, _From, State) ->
 %%--------------------------------------------------------------------
 handle_cast({initialize, Req}, #state{ heartbeat_interval = Interval } = State) ->
     Headers = Req:get(headers),
-    case proplists:get_value('Referer', Headers) of
+    Headers1 = 
+    case proplists:get_value('Origin', Headers) of
         undefined ->
-            {noreply, State, Interval};
+            Headers;
         Origin ->
             case socketio_listener:verify_origin(Origin, socketio_listener:origins(listener(State))) of
                 true ->
-                    Headers1 = [{"Access-Control-Allow-Origin", "*"},
-                                {"Access-Control-Allow-Credentials", "true"},
-                                {"Content-Type", "multipart/x-mixed-replace;boundary=\"socketio\""},
-                                {"Connection", "Keep-Alive"}],
-                    link(Req:get(socket)),
-                    Req:stream(head, Headers1),
-                    Req:stream("--socketio\n"),
-                    {noreply, State#state{ connection_reference = {'xhr-multipart', connected} }, Interval};
+                    [{"Access-Control-Allow-Origin", "*"},
+                     {"Access-Control-Allow-Credentials", "true"}|Headers];
                 false ->
-                    {noreply, State, Interval}
+                    Headers
             end
-    end;
+    end,
+    link(Req:get(socket)),
+    Req:stream(head, [{"Content-Type", "multipart/x-mixed-replace;boundary=\"socketio\""},
+                      {"Connection", "Keep-Alive"}|Headers1]),
+    Req:stream("--socketio\n"),
+    {noreply, State#state{ connection_reference = {'xhr-multipart', connected} }, Interval};
 
 handle_cast(heartbeat, #state{ heartbeats = Beats,
                                heartbeat_interval = Interval } = State) ->
