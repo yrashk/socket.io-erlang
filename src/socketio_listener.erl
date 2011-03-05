@@ -1,9 +1,13 @@
 -module(socketio_listener).
 -behaviour(gen_server).
+
+-include_lib("ex_uri.hrl").
+
 %% API
 -export([start/1, server/1]).
 -export([start_link/2]).
 -export([event_manager/1, origins/1, origins/2]).
+-export([verify_origin/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -48,6 +52,10 @@ origins(Server) ->
 
 origins(Server, Origins) ->
     gen_server:call(Server, {origins, Origins}).
+
+verify_origin(Origin, Origins) ->
+    {ok, #ex_uri{ authority = #ex_uri_authority{ host = Host, port = Port } } = _URI, _} = ex_uri:decode(Origin),
+    verify_origin_1({Host, Port}, Origins).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -153,3 +161,18 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+verify_origin_1(_Origin, [{"*","*"}|_]) ->
+    true;
+verify_origin_1({Host, undefined}, Origins) ->
+    verify_origin_1({Host, 80}, Origins);
+verify_origin_1({_Host, Port}, [{"*", Port}|_]) ->
+    true;
+verify_origin_1({Host, _Port}, [{Host, "*"}|_]) ->
+    true;
+verify_origin_1({Host, Port}, [{Host, Port}|_]) ->
+    true;
+verify_origin_1(Origin, [_|Rest]) ->
+    verify_origin_1(Origin, Rest);
+verify_origin_1(_Origin, []) ->
+    false.
+
