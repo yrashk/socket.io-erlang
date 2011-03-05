@@ -13,7 +13,7 @@
 
 -record(state, {
           session_id,
-          message_buffer = [],
+          req,
           connection_reference,
           heartbeats = 0,
           heartbeat_interval,
@@ -74,6 +74,7 @@ init([Sup, SessionId, {'xhr-multipart', Req}]) ->
     {ok, #state{
        session_id = SessionId,
        connection_reference = {'xhr-multipart', none},
+       req = Req,
        close_timeout = CloseTimeout,
        heartbeat_interval = HeartbeatInterval,
        event_manager = EventMgr,
@@ -144,11 +145,10 @@ handle_cast({initialize, Req}, #state{ heartbeat_interval = Interval } = State) 
                                 {"Access-Control-Allow-Credentials", "true"},
                                 {"Content-Type", "multipart/x-mixed-replace;boundary=\"socketio\""},
                                 {"Connection", "Keep-Alive"}],
-                    XhrLoop = spawn_link(fun() -> xhr_loop(Req, infinity) end),
                     link(Req:get(socket)),
                     Req:stream(head, Headers1),
                     Req:stream("--socketio\n"),
-                    {noreply, State#state{ connection_reference = {'xhr-multipart', XhrLoop} }, Interval};
+                    {noreply, State#state{ connection_reference = {'xhr-multipart', connected} }, Interval};
                 false ->
                     {noreply, State, Interval}
             end
@@ -161,8 +161,8 @@ handle_cast(heartbeat, #state{ heartbeats = Beats,
     {noreply, State#state { heartbeats = Beats1 }, Interval};
 
 %% Send
-handle_cast({send, Message}, #state{ connection_reference = {'xhr-multipart', Pid }, heartbeat_interval = Interval } = State) ->
-    Pid ! {send, Message},
+handle_cast({send, Message}, #state{ req = Req, connection_reference = {'xhr-multipart', connected }, heartbeat_interval = Interval } = State) ->
+    send_message(Message, Req),
     {noreply, State, Interval};
 
 handle_cast(_, #state{} = State) ->
@@ -230,16 +230,6 @@ send_message([6] = Message, Req) ->
     Req:stream("Content-Type: text/plain; charset=us-ascii\n\n" ++ Message ++ "\n--socketio\n");
 send_message(Message, Req) ->
     Req:stream("Content-Type: text/plain\n\n" ++ Message ++ "\n--socketio\n").
-
-xhr_loop(Req, Timeout) ->
-    receive
-        {send, Message} ->
-            send_message(Message, Req),
-            xhr_loop(Req, Timeout);
-        _ -> void
-    after Timeout ->
-            send_message("", Req)
-    end.
 
 listener(#state{ sup = Sup }) ->
     socketio_listener:server(Sup).
