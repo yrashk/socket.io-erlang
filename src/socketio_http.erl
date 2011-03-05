@@ -112,6 +112,22 @@ handle_call({request, 'POST', ["send", SessionId, "xhr-polling"|Resource], Req }
         end,
     {reply, Response, State};
 
+%% New XHR Multipart request
+handle_call({request, 'GET', ["xhr-multipart"|Resource], Req }, _From, #state{ resource = Resource} = State) ->
+    handle_call({session, generate, {'xhr-multipart', Req}, socketio_transport_xhr_multipart}, _From, State),
+    {noreply, State};
+
+%% Incoming XHR Multipart data
+handle_call({request, 'POST', ["send", SessionId, "xhr-multipart"|Resource], Req }, _From, #state{ resource = Resource, sessions = Sessions } = State) ->
+    Response =  
+        case ets:lookup(Sessions, SessionId) of
+            [{SessionId, Pid}] -> 
+                gen_server:call(Pid, {'xhr-multipart', data, Req});
+            _ ->
+                Req:ok(404, "")
+        end,
+    {reply, Response, State};
+
 %% If we can't route it, let others deal with it
 handle_call({request, _Method, _Path, _Req} = Req, From, #state{ default_http_handler = HttpHandler } = State) when is_atom(HttpHandler) ->
     handle_call(Req, From, State#state{ default_http_handler = fun(P1, P2, P3) -> HttpHandler:handle_request(P1, P2, P3) end });
@@ -148,8 +164,8 @@ handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(acquire_event_manager, #state{ sup = Sup } = State) ->
-    EventManager = socketio_listener:event_manager(socketio_listener:server(Sup)),
+handle_cast(acquire_event_manager, State) ->
+    EventManager = socketio_listener:event_manager(listener(State)),
     {noreply, State#state{ event_manager = EventManager }};
 
 handle_cast(_Msg, State) ->
@@ -232,3 +248,6 @@ handle_websocket(Server, Ws, SessionID, Pid) ->
         _Ignore ->
             handle_websocket(Server, Ws, SessionID, Pid)
     end.
+
+listener(#state{ sup = Sup }) ->
+    socketio_listener:server(Sup).

@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2]).
+-export([start_link/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -17,7 +17,8 @@
           connection_reference,
           heartbeats = 0,
           heartbeat_interval,
-          event_manager
+          event_manager,
+          sup
          }).
 
 %%%===================================================================
@@ -31,8 +32,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(SessionId, ConnectionReference) ->
-    gen_server:start_link(?MODULE, [SessionId, ConnectionReference], []).
+start_link(Sup, SessionId, ConnectionReference) ->
+    gen_server:start_link(?MODULE, [Sup, SessionId, ConnectionReference], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -49,7 +50,7 @@ start_link(SessionId, ConnectionReference) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([SessionId, ConnectionReference]) ->
+init([Sup, SessionId, ConnectionReference]) ->
     HeartbeatInterval = 
     case application:get_env(heartbeat_interval) of
         {ok, Time} ->
@@ -64,7 +65,8 @@ init([SessionId, ConnectionReference]) ->
        session_id = SessionId,
        connection_reference = ConnectionReference,
        heartbeat_interval = HeartbeatInterval,
-       event_manager = EventMgr
+       event_manager = EventMgr,
+       sup = Sup
       }}.
 
 %%--------------------------------------------------------------------

@@ -1,4 +1,4 @@
--module(socketio_transport_xhr_polling).
+-module(socketio_transport_xhr_multipart).
 -include_lib("../include/socketio.hrl").
 -behaviour(gen_server).
 
@@ -15,7 +15,8 @@
           session_id,
           message_buffer = [],
           connection_reference,
-          polling_duration,
+          heartbeats = 0,
+          heartbeat_interval,
           close_timeout,
           event_manager,
           sup
@@ -50,14 +51,14 @@ start_link(Sup, SessionId, ConnectionReference) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Sup, SessionId, {'xhr-polling', Req}]) ->
+init([Sup, SessionId, {'xhr-multipart', Req}]) ->
     process_flag(trap_exit, true),
-    PollingDuration = 
-    case application:get_env(xhr_polling_duration) of
+    HeartbeatInterval = 
+    case application:get_env(heartbeat_interval) of
         {ok, Time} ->
             Time;
         _ ->
-            20000
+            infinity
     end,
     CloseTimeout = 
     case application:get_env(close_timeout) of
@@ -67,12 +68,14 @@ init([Sup, SessionId, {'xhr-polling', Req}]) ->
 	    8000
     end,
     {ok, EventMgr} = gen_event:start_link(),
-    send_message(#msg{ content = SessionId }, Req),
+    gen_server:cast(self(), {initialize, Req}),
+    socketio_client:send(self(), #msg{ content = SessionId }),
+    gen_server:cast(self(), heartbeat),
     {ok, #state{
        session_id = SessionId,
-       connection_reference = {'xhr-polling', none},
-       polling_duration = PollingDuration,
+       connection_reference = {'xhr-multipart', none},
        close_timeout = CloseTimeout,
+       heartbeat_interval = HeartbeatInterval,
        event_manager = EventMgr,
        sup = Sup
       }}.
@@ -92,19 +95,19 @@ init([Sup, SessionId, {'xhr-polling', Req}]) ->
 %% @end
 %%--------------------------------------------------------------------
 %% Incoming data
-handle_call({'xhr-polling', data, Req}, _From, #state{ close_timeout = _ServerTimeout, event_manager = EventManager } = State) ->
+handle_call({'xhr-multipart', data, Req}, _From, #state{ heartbeat_interval = Interval, event_manager = EventManager } = State) ->
     Data = Req:parse_post(),
     Self = self(),
     lists:foreach(fun({"data", M}) ->
-        spawn_link(fun () ->
+        spawn(fun () ->
             F = fun(#heartbeat{}) -> ignore;
                    (M0) -> gen_event:notify(EventManager, {message, Self,  M0})
             end,
             F(socketio_data:decode(#msg{content=M}))
         end)
     end, Data),
-    Response = send_message("ok", Req),
-    {reply, Response, State};
+    Req:ok("ok"),
+    {reply, ok, State, Interval};
 
 %% Event management
 handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
@@ -129,25 +132,40 @@ handle_call(stop, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-%% Polling
-handle_cast({ 'xhr-polling', polling_request, Req, Server}, #state { close_timeout = _ServerTimeout, polling_duration = Interval, message_buffer = [] } = State) ->
-    XhrLoop = spawn_link(fun() -> xhr_loop(Req, Server, Interval) end),
-    link(Req:get(socket)),
-    {noreply, State#state{ connection_reference = {'xhr-polling', XhrLoop} }};
+handle_cast({initialize, Req}, #state{ heartbeat_interval = Interval } = State) ->
+    Headers = Req:get(headers),
+    case proplists:get_value('Referer', Headers) of
+        undefined ->
+            {noreply, State, Interval};
+        Origin ->
+            case socketio_listener:verify_origin(Origin, socketio_listener:origins(listener(State))) of
+                true ->
+                    Headers1 = [{"Access-Control-Allow-Origin", "*"},
+                                {"Access-Control-Allow-Credentials", "true"},
+                                {"Content-Type", "multipart/x-mixed-replace;boundary=\"socketio\""},
+                                {"Connection", "Keep-Alive"}],
+                    XhrLoop = spawn_link(fun() -> xhr_loop(Req, infinity) end),
+                    link(Req:get(socket)),
+                    Req:stream(head, Headers1),
+                    Req:stream("--socketio\n"),
+                    {noreply, State#state{ connection_reference = {'xhr-multipart', XhrLoop} }, Interval};
+                false ->
+                    {noreply, State, Interval}
+            end
+    end;
 
-handle_cast({'xhr-polling', polling_request, Req, Server}, #state { close_timeout = _ServerTimeout, message_buffer = Buffer } = State) ->
-    gen_server:reply(Server, send_message({buffer, Buffer}, Req)),
-    {noreply, State#state{ message_buffer = []}};
+handle_cast(heartbeat, #state{ heartbeats = Beats,
+                               heartbeat_interval = Interval } = State) ->
+    Beats1 = Beats + 1,
+    socketio_client:send(self(), #heartbeat{ index = Beats1 }),
+    {noreply, State#state { heartbeats = Beats1 }, Interval};
 
 %% Send
-handle_cast({send, Message}, #state{ connection_reference = {'xhr-polling', none}, close_timeout = _ServerTimeout, message_buffer = Buffer } = State) ->
-    {noreply, State#state{ message_buffer = lists:append(Buffer, [Message])}};
-
-handle_cast({send, Message}, #state{ connection_reference = {'xhr-polling', Pid }, close_timeout = _ServerTimeout } = State) ->
+handle_cast({send, Message}, #state{ connection_reference = {'xhr-multipart', Pid }, heartbeat_interval = Interval } = State) ->
     Pid ! {send, Message},
-    {noreply, State};
+    {noreply, State, Interval};
 
-handle_cast(_, #state{ close_timeout = _ServerTimeout } = State) ->
+handle_cast(_, #state{} = State) ->
     {noreply, State}.
 
 
@@ -161,12 +179,15 @@ handle_cast(_, #state{ close_timeout = _ServerTimeout } = State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({'EXIT',_Pid,_Reason}, #state{ close_timeout = ServerTimeout} = State) ->
-    {noreply, State#state { connection_reference = {'xhr-polling', none}}, ServerTimeout};
+handle_info({'EXIT',_Port,_Reason}, #state{ close_timeout = ServerTimeout} = State) when is_port(_Port) ->
+    {noreply, State#state { connection_reference = {'xhr-multipart', none}}, ServerTimeout};
 
-%% Client has timed out
+handle_info(timeout, #state{ connection_reference = {'xhr-multipart', none} } = State) ->
+    {noreply, State};
+
 handle_info(timeout, State) ->
-    {stop, shutdown, State};
+    gen_server:cast(self(), heartbeat),
+    {noreply, State};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -202,36 +223,23 @@ code_change(_OldVsn, State, _Extra) ->
 send_message(#msg{} = Message, Req) ->
     send_message(socketio_data:encode(Message), Req);
 
-send_message({buffer, Messages}, Req) ->
-    Messages0 = lists:map(fun(M) ->
-				  case M of
-				      #msg{} ->
-					  socketio_data:encode(M);
-				      _ ->
-					  M
-				  end
-			  end, Messages),
-    send_message(Messages0, Req);
+send_message(#heartbeat{} = Message, Req) ->
+    send_message(socketio_data:encode(Message), Req);
 
+send_message([6] = Message, Req) ->
+    Req:stream("Content-Type: text/plain; charset=us-ascii\n\n" ++ Message ++ "\n--socketio\n");
 send_message(Message, Req) ->
-    Headers = [{"Content-Type", "text/plain"},
-	       {"Connection", "keep-alive"}],
-    Headers0 = case proplists:get_value('Referer', Req:get(headers)) of
-		  undefined -> Headers;
-		  Origin -> [{"Access-Control-Allow-Origin", Origin}|Headers]
-	      end,
-    Headers1 = case proplists:get_value('Cookie', Req:get(headers)) of
-		   undefined -> Headers0;
-		   _Cookie -> [{"Access-Control-Allow-Credentials", "true"}|Headers0]
-	       end,
-    Req:ok(Headers1, Message).
+    Req:stream("Content-Type: text/plain\n\n" ++ Message ++ "\n--socketio\n").
 
-xhr_loop(Req, Server, Timeout) ->
+xhr_loop(Req, Timeout) ->
     receive
-	{send, Message} ->
-	    gen_server:reply(Server, send_message(Message, Req));
-	_ -> void
+        {send, Message} ->
+            send_message(Message, Req),
+            xhr_loop(Req, Timeout);
+        _ -> void
     after Timeout ->
-	    gen_server:reply(Server, send_message("", Req))
+            send_message("", Req)
     end.
 
+listener(#state{ sup = Sup }) ->
+    socketio_listener:server(Sup).
