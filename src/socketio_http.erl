@@ -97,7 +97,7 @@ handle_call({request, 'GET', [_Random, SessionId, "xhr-polling"|Resource], Req }
         [{SessionId, Pid}] -> 
             gen_server:cast(Pid, {'xhr-polling', polling_request, Req, From});
         _ ->
-            gen_server:reply(From, Req:ok(404, ""))
+            gen_server:reply(From, Req:respond(404, ""))
     end,
     {noreply, State};
 
@@ -108,7 +108,7 @@ handle_call({request, 'POST', ["send", SessionId, "xhr-polling"|Resource], Req }
             [{SessionId, Pid}] -> 
                 gen_server:call(Pid, {'xhr-polling', data, Req});
             _ ->
-                Req:ok(404, "")
+                Req:respond(404, "")
         end,
     {reply, Response, State};
 
@@ -122,7 +122,7 @@ handle_call({request, 'GET', [Index, _Random, SessionId, "jsonp-polling"|Resourc
         [{SessionId, Pid}] ->
             gen_server:cast(Pid, {'jsonp-polling', polling_request, {Req, Index}, From});
         _ ->
-            gen_server:reply(From, Req:ok(404, ""))
+            gen_server:reply(From, Req:respond(404, ""))
     end,
     {noreply, State};
 
@@ -133,7 +133,7 @@ handle_call({request, 'POST', [Index, _Random, SessionId, "jsonp-polling"|Resour
             [{SessionId, Pid}] -> 
                 gen_server:call(Pid, {'jsonp-polling', data, {Req, Index}});
             _ ->
-                Req:ok(404, "")
+                Req:respond(404, "")
         end,
     {reply, Response, State};
 
@@ -149,7 +149,7 @@ handle_call({request, 'POST', ["send", SessionId, "xhr-multipart"|Resource], Req
             [{SessionId, Pid}] -> 
                 gen_server:call(Pid, {'xhr-multipart', data, Req});
             _ ->
-                Req:ok(404, "")
+                Req:respond(404, "")
         end,
     {reply, Response, State};
 
