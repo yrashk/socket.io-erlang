@@ -70,7 +70,7 @@ init([Sup, SessionId, {'jsonp-polling', {Req, Index}}]) ->
 	    8000
     end,
     {ok, EventMgr} = gen_event:start_link(),
-    send_message(#msg{content = SessionId}, Req, Index),
+    send_message(#msg{content = SessionId}, Req, Index, Sup),
     {ok, #state{
        session_id = SessionId,
        connection_reference = {'jsonp-polling', none},
@@ -96,21 +96,29 @@ init([Sup, SessionId, {'jsonp-polling', {Req, Index}}]) ->
 %% @end
 %%--------------------------------------------------------------------
 %% Incoming data
-handle_call({'jsonp-polling', data, {Req, _Index}}, _From, #state{ event_manager = EventManager } = State) ->
+handle_call({'jsonp-polling', data, {Req, _Index}}, _From, #state{ event_manager = EventManager, sup = Sup } = State) ->
     Data = Req:parse_post(),
     Self = self(),
-    lists:foreach(fun({"data", M}) ->
-        spawn(fun () ->
-            F = fun(#heartbeat{}) -> ignore;
-                   (M0) -> gen_event:notify(EventManager, {message, Self, M0})
-            end,
-            F(socketio_data:decode(#msg{content=M}))
-        end)
-    end, Data),
-    Response = Req:ok(""),
+    Response =
+	case cors_headers(Req:get(headers), Sup) of
+	    {false, _Headers} ->
+		Req:respond(405, "unauthorized");
+	    {_, Headers0} ->
+		Data = Req:parse_post(),
+		Self = self(),
+    		lists:foreach(fun({"data", M}) ->
+    				      spawn(fun () ->
+    						    F = fun(#heartbeat{}) -> ignore;
+    							   (M0) -> gen_event:notify(EventManager, {message, Self,  M0})
+    							end,
+    						    F(socketio_data:decode(#msg{content=M}))
+    					    end)
+    			      end, Data),
+		Req:ok([Headers0|[{"Content-Type", "text/plain"}]], "ok")
+	end,
     {reply, Response, State};
 
-%% Event management
+%% Event management3
 handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
     {reply, EventMgr, State};
 
@@ -148,8 +156,8 @@ handle_cast({'jsonp-polling', polling_request, {Req, Index}, Server}, #state { m
 handle_cast({send, Message}, #state{ connection_reference = {'jsonp-polling', none}, message_buffer = Buffer } = State) ->
     {noreply, State#state{ message_buffer = lists:append(Buffer, [Message])}};
 
-handle_cast({send, Message}, #state{ connection_reference = {'jsonp-polling', connected }, req = Req, reply_to = Caller, index = Index} = State) ->
-    gen_server:reply(Caller, send_message(Message, Req, Index)),
+handle_cast({send, Message}, #state{ connection_reference = {'jsonp-polling', connected }, req = Req, reply_to = Caller, index = Index, sup = Sup} = State) ->
+    gen_server:reply(Caller, send_message(Message, Req, Index, Sup)),
     {noreply, State#state{ connection_reference = {'jsonp-polling', none}}};
 
 handle_cast(_, State) ->
@@ -170,8 +178,8 @@ handle_info({'EXIT',_Port,_Reason}, #state{ connection_reference = {'jsonp-polli
     {noreply, State#state { connection_reference = {'jsonp-polling', none}}, CloseTimeout};
 
 %% Connection has timed out
-handle_info(timeout, #state{ connection_reference = {'jsonp-polling', connected}, reply_to = Caller, req = Req, index = Index } = State) ->
-    gen_server:reply(Caller, send_message("", Req, Index)),
+handle_info(timeout, #state{ connection_reference = {'jsonp-polling', connected}, reply_to = Caller, req = Req, index = Index, sup = Sup } = State) ->
+    gen_server:reply(Caller, send_message("", Req, Index, Sup)),
     {noreply, State};
 
 %% Client has timed out
@@ -209,10 +217,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-send_message(#msg{} = Message, Req, Index) ->
-    send_message(socketio_data:encode(Message), Req, Index);
+send_message(#msg{} = Message, Req, Index, Sup) ->
+    send_message(socketio_data:encode(Message), Req, Index, Sup);
 
-send_message({buffer, Messages}, Req, Index) ->
+send_message({buffer, Messages}, Req, Index, Sup) ->
     Messages0 = lists:map(fun(M) ->
 				  case M of
 				      #msg{} ->
@@ -221,24 +229,42 @@ send_message({buffer, Messages}, Req, Index) ->
 					  M
 				  end
 			  end, Messages),
-    send_message(Messages0, Req, Index);
+    send_message(Messages0, Req, Index, Sup);
 
-send_message(Message, Req, Index) -> %% ADD CORS
+send_message(Message, Req, Index, Sup) ->
     Headers = [{"Connection", "keep-alive"}],
-    Headers0 = case proplists:get_value('Referer', Req:get(headers)) of
-		  undefined -> Headers;
-		  Origin -> [{"Access-Control-Allow-Origin", Origin}|Headers]
-	      end,
-    Headers1 = case proplists:get_value('Cookie', Req:get(headers)) of
-		   undefined -> Headers0;
-		   _Cookie -> [{"Access-Control-Allow-Credentials", "true"}|Headers0]
-	       end,
-    send_message(Headers1, Message, Req, Index).
+    case cors_headers(Req:get(headers), Sup) of
+	{false, _} ->
+	    Req:ok("alert('Cross domain security restrictions not met');");
+	{_, Headers0} ->
+	    send_message_1([Headers0|Headers], Message, Req, Index)
+	end.
 
-send_message(Headers, Message, Req, Index) ->
+send_message_1(Headers, Message, Req, Index) ->
     Headers0 = [{"Content-Type", "text/javascript; charset=UTF-8"}|Headers],
     %% FIXME: There must be a better way of escaping Javascript?
     [_|Rest] = binary_to_list(jsx:term_to_json([list_to_binary(Message)])),
     [_|Message0] = lists:reverse(Rest),
     Message1 = "io.JSONP["++Index++"]._("++lists:reverse(Message0)++");",
     Req:ok(Headers0, Message1).
+
+cors_headers(Headers, Sup) ->
+    case proplists:get_value('Origin', Headers) of
+	undefined ->
+	    {undefined, []};
+	Origin ->
+	    case socketio_listener:verify_origin(Origin, socketio_listener:origins(Sup)) of
+		true ->
+		    Headers0 = [{"Access-Control-Allow-Origin", "*"}],
+		    Headers1 =
+			case proplists:get_value('Cookie', Headers) of
+			    undefined ->
+				Headers0;
+			    _Cookie ->
+				[{"Access-Control-Allow-Credentials", "true"}|Headers0]
+			end,
+		    {true, [Headers1]};
+		false ->
+		    {false, Headers}
+	    end
+    end.

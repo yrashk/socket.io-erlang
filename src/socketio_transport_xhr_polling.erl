@@ -1,4 +1,4 @@
--module(socketio_transport_polling).
+-module(socketio_transport_xhr_polling).
 -include_lib("../include/socketio.hrl").
 -behaviour(gen_server).
 
@@ -52,7 +52,7 @@ start_link(Sup, SessionId, ConnectionReference) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Sup, SessionId, {'xhr-polling', Client}]) ->
+init([Sup, SessionId, {'xhr-polling', Req}]) ->
     process_flag(trap_exit, true),
     PollingDuration = 
     case application:get_env(polling_duration) of
@@ -69,7 +69,7 @@ init([Sup, SessionId, {'xhr-polling', Client}]) ->
 	    8000
     end,
     {ok, EventMgr} = gen_event:start_link(),
-    send_message(#msg{content = SessionId}, Client),
+    send_message(#msg{content = SessionId}, Req, Sup),
     {ok, #state{
        session_id = SessionId,
        connection_reference = {'xhr-polling', none},
@@ -138,7 +138,6 @@ handle_cast({'xhr-polling', polling_request, Req, Server}, #state { polling_dura
 
 handle_cast({'xhr-polling', polling_request, Req, Server}, #state { message_buffer = Buffer } = State) ->
     link(Req:get(socket)),
-    gen_server:reply(Server, send_message({buffer, Buffer}, Req)),
     handle_cast({send, {buffer, Buffer}}, State#state{ connection_reference = {'xhr-polling', connected},
 						       req = Req, reply_to = Server, message_buffer = [] });
 
@@ -146,8 +145,8 @@ handle_cast({'xhr-polling', polling_request, Req, Server}, #state { message_buff
 handle_cast({send, Message}, #state{ connection_reference = {'xhr-polling', none}, message_buffer = Buffer } = State) ->
     {noreply, State#state{ message_buffer = lists:append(Buffer, [Message])}};
 
-handle_cast({send, Message}, #state{ connection_reference = {'xhr-polling', connected }, req = Req, reply_to = Caller} = State) ->
-    gen_server:reply(Caller, send_message(Message, Req)),
+handle_cast({send, Message}, #state{ connection_reference = {'xhr-polling', connected }, req = Req, reply_to = Caller, sup = Sup} = State) ->
+    gen_server:reply(Caller, send_message(Message, Req, Sup)),
     {noreply, State#state{ connection_reference = {'xhr-polling', none}}};
 
 handle_cast(_, State) ->
@@ -168,8 +167,8 @@ handle_info({'EXIT',_Port,_Reason}, #state{ connection_reference = {'xhr-polling
     {noreply, State#state { connection_reference = {'xhr-polling', none}}, CloseTimeout};
 
 %% Connection has timed out
-handle_info(timeout, #state{ connection_reference = {'xhr-polling', connected}, reply_to = Caller, req = Req } = State) ->
-    gen_server:reply(Caller, send_message("", Req)),
+handle_info(timeout, #state{ connection_reference = {'xhr-polling', connected}, reply_to = Caller, req = Req, sup = Sup } = State) ->
+    gen_server:reply(Caller, send_message("", Req, Sup)),
     {noreply, State};
 
 %% Client has timed out
@@ -177,7 +176,6 @@ handle_info(timeout, State) ->
     {stop, shutdown, State};
 
 handle_info(_Info, State) ->
-    io:format("Got something ~p~n", [_Info]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -208,10 +206,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-send_message(#msg{} = Message, Req) ->
-    send_message(socketio_data:encode(Message), Req);
+send_message(#msg{} = Message, Req, Sup) ->
+    send_message(socketio_data:encode(Message), Req, Sup);
 
-send_message({buffer, Messages}, Req) ->
+send_message({buffer, Messages}, Req, Sup) ->
     Messages0 = lists:map(fun(M) ->
 				  case M of
 				      #msg{} ->
@@ -220,20 +218,37 @@ send_message({buffer, Messages}, Req) ->
 					  M
 				  end
 			  end, Messages),
-    send_message(Messages0, Req);
+    send_message(Messages0, Req, Sup);
 
-send_message(Message, Req) -> %% ADD CORS
+%% TODO: Add case
+send_message(Message, Req, Sup) ->
     Headers = [{"Connection", "keep-alive"}],
-    Headers0 = case proplists:get_value('Referer', Req:get(headers)) of
-		  undefined -> Headers;
-		  Origin -> [{"Access-Control-Allow-Origin", Origin}|Headers]
-	      end,
-    Headers1 = case proplists:get_value('Cookie', Req:get(headers)) of
-		   undefined -> Headers0;
-		   _Cookie -> [{"Access-Control-Allow-Credentials", "true"}|Headers0]
-	       end,
-    send_message(Headers1, Message, Req).
-
-send_message(Headers, Message, Req) ->
-    Headers0 = [{"Content-Type", "text/plain"}|Headers],
+    Headers0 =
+	case cors_headers(Req:get(headers), Sup) of
+	    {false, _} ->
+		Headers;
+	    {_, Headers1} ->
+		[Headers1|Headers]
+	end,
     Req:ok(Headers0, Message).
+
+cors_headers(Headers, Sup) ->
+    case proplists:get_value('Origin', Headers) of
+	undefined ->
+	    {undefined, []};
+	Origin ->
+	    case socketio_listener:verify_origin(Origin, socketio_listener:origins(Sup)) of
+		true ->
+		    Headers0 = [{"Access-Control-Allow-Origin", "*"}],
+		    Headers1 =
+			case proplists:get_value('Cookie', Headers) of
+			    undefined ->
+				Headers0;
+			    _Cookie ->
+				[{"Access-Control-Allow-Credentials", "true"}|Headers0]
+			end,
+		    {true, [Headers1]};
+		false ->
+		    {false, Headers}
+	    end
+    end.
