@@ -242,9 +242,9 @@ send_message('xhr-polling', Headers, Message, Req) ->
     Req:ok(Headers0, Message);
 
 send_message('jsonp-polling', Headers, Message, {Req, Index}) ->
-    Headers = [{"Content-Type", "text/javascript; charset=UTF-8"}|Headers],
+    Headers0 = [{"Content-Type", "text/javascript; charset=UTF-8"}|Headers],
     %% FIXME: There must be a better way of escaping Javascript?
     [_|Rest] = binary_to_list(jsx:term_to_json([list_to_binary(Message)])),
     [_|Message0] = lists:reverse(Rest),
     Message1 = "io.JSONP["++Index++"]._("++lists:reverse(Message0)++");",
-    Req:ok(Headers, Message1).
+    Req:ok(Headers0, Message1).
