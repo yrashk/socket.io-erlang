@@ -112,6 +112,31 @@ handle_call({request, 'POST', ["send", SessionId, "xhr-polling"|Resource], Req }
         end,
     {reply, Response, State};
 
+%% New JSONP Polling request
+handle_call({request, 'GET', [Index, _Random, "jsonp-polling"|Resource], Req }, From, #state{ resource = Resource} = State) ->
+    handle_call({session, generate, {'jsonp-polling', {Req, Index}}, socketio_transport_polling}, From, State);
+
+%% Returning JSONP Polling
+handle_call({request, 'GET', [Index, _Random, SessionId, "jsonp-polling"|Resource], Req }, From, #state{ resource = Resource, sessions = Sessions } = State) ->
+    case ets:lookup(Sessions, SessionId) of
+        [{SessionId, Pid}] ->
+            gen_server:cast(Pid, {'jsonp-polling', polling_request, {Req, Index}, From});
+        _ ->
+            gen_server:reply(From, Req:ok(404, ""))
+    end,
+    {noreply, State};
+
+%% Incoming JSONP Polling data
+handle_call({request, 'POST', [Index, _Random, SessionId, "jsonp-polling"|Resource], Req }, _From, #state{ resource = Resource, sessions = Sessions } = State) ->
+    Response =  
+        case ets:lookup(Sessions, SessionId) of
+            [{SessionId, Pid}] -> 
+                gen_server:call(Pid, {'jsonp-polling', data, {Req, Index}});
+            _ ->
+                Req:ok(404, "")
+        end,
+    {reply, Response, State};
+
 %% New XHR Multipart request
 handle_call({request, 'GET', ["xhr-multipart"|Resource], Req }, _From, #state{ resource = Resource} = State) ->
     handle_call({session, generate, {'xhr-multipart', Req}, socketio_transport_xhr_multipart}, _From, State),

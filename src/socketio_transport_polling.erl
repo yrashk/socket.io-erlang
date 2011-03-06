@@ -50,7 +50,7 @@ start_link(Sup, SessionId, ConnectionReference) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Sup, SessionId, {TransportType, Req}]) ->
+init([Sup, SessionId, {TransportType, Client}]) ->
     process_flag(trap_exit, true),
     PollingDuration = 
     case application:get_env(polling_duration) of
@@ -67,7 +67,7 @@ init([Sup, SessionId, {TransportType, Req}]) ->
 	    8000
     end,
     {ok, EventMgr} = gen_event:start_link(),
-    send_message(TransportType, #msg{content = SessionId}, Req),
+    send_message(TransportType, #msg{content = SessionId}, Client),
     {ok, #state{
        session_id = SessionId,
        connection_reference = {TransportType, none},
@@ -92,7 +92,8 @@ init([Sup, SessionId, {TransportType, Req}]) ->
 %% @end
 %%--------------------------------------------------------------------
 %% Incoming data
-handle_call({TransportType, data, Req}, _From, #state{ event_manager = EventManager } = State) ->
+handle_call({TransportType, data, Client}, _From, #state{ event_manager = EventManager } = State) ->
+    Req = get_request(Client),
     Data = Req:parse_post(),
     Self = self(),
     lists:foreach(fun({"data", M}) ->
@@ -103,7 +104,7 @@ handle_call({TransportType, data, Req}, _From, #state{ event_manager = EventMana
             F(socketio_data:decode(#msg{content=M}))
         end)
     end, Data),
-    Response = send_message(TransportType, "ok", Req),
+    Response = send_message(TransportType, "ok", Client),
     {reply, Response, State};
 
 %% Event management
@@ -130,20 +131,21 @@ handle_call(stop, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 %% Polling
-handle_cast({TransportType, polling_request, Req, Server}, #state { polling_duration = Interval, message_buffer = [] } = State) ->
+handle_cast({TransportType, polling_request, Client, Server}, #state { polling_duration = Interval, message_buffer = [] } = State) ->
+    Req = get_request(Client),
     link(Req:get(socket)),
-    {noreply, State#state{ connection_reference = {TransportType, {Req, Server} } }, Interval};
+    {noreply, State#state{ connection_reference = {TransportType, {Client, Server}} }, Interval};
 
-handle_cast({TransportType, polling_request, Req, Server}, #state { message_buffer = Buffer } = State) ->
-    gen_server:reply(Server, send_message(TransportType, {buffer, Buffer}, Req)),
+handle_cast({TransportType, polling_request, Client, Server}, #state { message_buffer = Buffer } = State) ->
+    gen_server:reply(Server, send_message(TransportType, {buffer, Buffer}, Client)),
     {noreply, State#state{ message_buffer = []}};
 
 %% Send
 handle_cast({send, Message}, #state{ connection_reference = {_TransportType, none}, message_buffer = Buffer } = State) ->
     {noreply, State#state{ message_buffer = lists:append(Buffer, [Message])}};
 
-handle_cast({send, Message}, #state{ connection_reference = {TransportType, {Req, Server} }, close_timeout = _ServerTimeout } = State) ->
-    gen_server:reply(Server, send_message(TransportType, Message, Req)),
+handle_cast({send, Message}, #state{ connection_reference = {TransportType, {Client, Server} }, close_timeout = _ServerTimeout } = State) ->
+    gen_server:reply(Server, send_message(TransportType, Message, Client)),
     {noreply, State#state{ connection_reference = {TransportType, none} }};
 
 handle_cast(_, State) ->
@@ -164,8 +166,8 @@ handle_info({'EXIT',_Pid,_Reason}, #state{ connection_reference = { TransportTyp
     {noreply, State#state { connection_reference = {TransportType, none}}, ServerTimeout};
 
 %% Connection has timed out
-handle_info(timeout, #state{ connection_reference = {TransportType, {Req, Server}} } = State) ->
-    gen_server:reply(Server, send_message(TransportType, "", Req)),
+handle_info(timeout, #state{ connection_reference = {TransportType, {Client, Server}} } = State) ->
+    gen_server:reply(Server, send_message(TransportType, "", Client)),
     {noreply, State};
 
 %% Client has timed out
@@ -203,10 +205,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-send_message(TransportType, #msg{} = Message, Req) ->
-    send_message(TransportType, socketio_data:encode(Message), Req);
+get_request({Req, _Index}) ->
+    Req;
+get_request(Req) ->
+    Req.
 
-send_message(TransportType, {buffer, Messages}, Req) ->
+send_message(TransportType, #msg{} = Message, Client) ->
+    send_message(TransportType, socketio_data:encode(Message), Client);
+
+send_message(TransportType, {buffer, Messages}, Client) ->
     Messages0 = lists:map(fun(M) ->
 				  case M of
 				      #msg{} ->
@@ -215,11 +222,11 @@ send_message(TransportType, {buffer, Messages}, Req) ->
 					  M
 				  end
 			  end, Messages),
-    send_message(TransportType, Messages0, Req);
+    send_message(TransportType, Messages0, Client);
 
-send_message('xhr-polling', Message, Req) ->
-    Headers = [{"Content-Type", "text/plain"},
-	       {"Connection", "keep-alive"}],
+send_message(TransportType, Message, Client) ->
+    Req = get_request(Client),
+    Headers = [{"Connection", "keep-alive"}],
     Headers0 = case proplists:get_value('Referer', Req:get(headers)) of
 		  undefined -> Headers;
 		  Origin -> [{"Access-Control-Allow-Origin", Origin}|Headers]
@@ -228,17 +235,16 @@ send_message('xhr-polling', Message, Req) ->
 		   undefined -> Headers0;
 		   _Cookie -> [{"Access-Control-Allow-Credentials", "true"}|Headers0]
 	       end,
-    Req:ok(Headers1, Message);
-send_message('jsonp-polling', Message, Req) ->
-    Headers = [{"Content-Type", "text/plain"},
-	       {"Connection", "keep-alive"}],
-    Headers0 = case proplists:get_value('Referer', Req:get(headers)) of
-		  undefined -> Headers;
-		  Origin -> [{"Access-Control-Allow-Origin", Origin}|Headers]
-	      end,
-    Headers1 = case proplists:get_value('Cookie', Req:get(headers)) of
-		   undefined -> Headers0;
-		   _Cookie -> [{"Access-Control-Allow-Credentials", "true"}|Headers0]
-	       end,
-    %% FIXME: Add the padding
-    Req:ok(Headers1, Message).
+    send_message(TransportType, Headers1, Message, Client).
+
+send_message('xhr-polling', Headers, Message, Req) ->
+    Headers0 = [{"Content-Type", "text/plain"}|Headers],
+    Req:ok(Headers0, Message);
+
+send_message('jsonp-polling', Headers, Message, {Req, Index}) ->
+    Headers = [{"Content-Type", "text/javascript; charset=UTF-8"}|Headers],
+    %% FIXME: There must be a better way of escaping Javascript?
+    [_|Rest] = binary_to_list(jsx:term_to_json([list_to_binary(Message)])),
+    [_|Message0] = lists:reverse(Rest),
+    Message1 = "io.JSONP["++Index++"]._("++lists:reverse(Message0)++");",
+    Req:ok(Headers, Message1).
