@@ -96,7 +96,7 @@ handle_call({'xhr-polling', data, Req}, _From, #state{ close_timeout = _ServerTi
     Data = Req:parse_post(),
     Self = self(),
     lists:foreach(fun({"data", M}) ->
-        spawn_link(fun () ->
+        spawn(fun () ->
             F = fun(#heartbeat{}) -> ignore;
                    (M0) -> gen_event:notify(EventManager, {message, Self,  M0})
             end,
@@ -130,10 +130,9 @@ handle_call(stop, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 %% Polling
-handle_cast({ 'xhr-polling', polling_request, Req, Server}, #state { close_timeout = _ServerTimeout, polling_duration = Interval, message_buffer = [] } = State) ->
-    XhrLoop = spawn_link(fun() -> xhr_loop(Req, Server, Interval) end),
+handle_cast({ 'xhr-polling', polling_request, Req, Server}, #state { polling_duration = Interval, message_buffer = [] } = State) ->
     link(Req:get(socket)),
-    {noreply, State#state{ connection_reference = {'xhr-polling', XhrLoop} }};
+    {noreply, State#state{ connection_reference = {'xhr-polling', Req, Server} }, Interval};
 
 handle_cast({'xhr-polling', polling_request, Req, Server}, #state { close_timeout = _ServerTimeout, message_buffer = Buffer } = State) ->
     gen_server:reply(Server, send_message({buffer, Buffer}, Req)),
@@ -143,9 +142,9 @@ handle_cast({'xhr-polling', polling_request, Req, Server}, #state { close_timeou
 handle_cast({send, Message}, #state{ connection_reference = {'xhr-polling', none}, close_timeout = _ServerTimeout, message_buffer = Buffer } = State) ->
     {noreply, State#state{ message_buffer = lists:append(Buffer, [Message])}};
 
-handle_cast({send, Message}, #state{ connection_reference = {'xhr-polling', Pid }, close_timeout = _ServerTimeout } = State) ->
-    Pid ! {send, Message},
-    {noreply, State};
+handle_cast({send, Message}, #state{ connection_reference = {'xhr-polling', Req, Server }, close_timeout = _ServerTimeout } = State) ->
+    gen_server:reply(Server, send_message(Message, Req)),
+    {noreply, State#state{ connection_reference = {'xhr-polling', none} }};
 
 handle_cast(_, #state{ close_timeout = _ServerTimeout } = State) ->
     {noreply, State}.
@@ -163,6 +162,11 @@ handle_cast(_, #state{ close_timeout = _ServerTimeout } = State) ->
 %%--------------------------------------------------------------------
 handle_info({'EXIT',_Pid,_Reason}, #state{ close_timeout = ServerTimeout} = State) ->
     {noreply, State#state { connection_reference = {'xhr-polling', none}}, ServerTimeout};
+
+%% Connection has timed out
+handle_info(timeout, #state{ connection_reference = {'xhr-polling', Req, Server} } = State) ->
+    gen_server:reply(Server, send_message("", Req)),
+    {noreply, State};
 
 %% Client has timed out
 handle_info(timeout, State) ->
@@ -225,13 +229,3 @@ send_message(Message, Req) ->
 		   _Cookie -> [{"Access-Control-Allow-Credentials", "true"}|Headers0]
 	       end,
     Req:ok(Headers1, Message).
-
-xhr_loop(Req, Server, Timeout) ->
-    receive
-	{send, Message} ->
-	    gen_server:reply(Server, send_message(Message, Req));
-	_ -> void
-    after Timeout ->
-	    gen_server:reply(Server, send_message("", Req))
-    end.
-
