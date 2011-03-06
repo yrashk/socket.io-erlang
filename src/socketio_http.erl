@@ -89,7 +89,7 @@ handle_call({request, 'GET', ["WebSocketMain.swf", "web-socket-js", "vendor", "l
 
 %% New XHR Polling request
 handle_call({request, 'GET', [_Random, "xhr-polling"|Resource], Req }, From, #state{ resource = Resource} = State) ->
-    handle_call({session, generate, {'xhr-polling', Req}, socketio_transport_polling}, From, State);
+    handle_call({session, generate, {'xhr-polling', Req}, socketio_transport_xhr_polling}, From, State);
 
 %% Returning XHR Polling
 handle_call({request, 'GET', [_Random, SessionId, "xhr-polling"|Resource], Req }, From, #state{ resource = Resource, sessions = Sessions } = State) ->
@@ -114,7 +114,7 @@ handle_call({request, 'POST', ["send", SessionId, "xhr-polling"|Resource], Req }
 
 %% New JSONP Polling request
 handle_call({request, 'GET', [Index, _Random, "jsonp-polling"|Resource], Req }, From, #state{ resource = Resource} = State) ->
-    handle_call({session, generate, {'jsonp-polling', {Req, Index}}, socketio_transport_polling}, From, State);
+    handle_call({session, generate, {'jsonp-polling', {Req, Index}}, socketio_transport_jsonp_polling}, From, State);
 
 %% Returning JSONP Polling
 handle_call({request, 'GET', [Index, _Random, SessionId, "jsonp-polling"|Resource], Req }, From, #state{ resource = Resource, sessions = Sessions } = State) ->
