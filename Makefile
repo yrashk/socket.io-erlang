@@ -5,7 +5,7 @@ deps:
 	@git submodule init
 	@git submodule update
 
-compile:
+compile: deps
 	@./rebar compile
 
 test: force
