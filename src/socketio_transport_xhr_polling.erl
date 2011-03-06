@@ -15,6 +15,7 @@
           session_id,
           message_buffer = [],
           connection_reference,
+	  req,
           polling_duration,
           close_timeout,
           event_manager,
@@ -50,7 +51,7 @@ start_link(Sup, SessionId, ConnectionReference) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Sup, SessionId, {'xhr-polling', Req}]) ->
+init([Sup, SessionId, {'xhr-polling', Req, Server}]) ->
     process_flag(trap_exit, true),
     PollingDuration = 
     case application:get_env(xhr_polling_duration) of
@@ -67,10 +68,10 @@ init([Sup, SessionId, {'xhr-polling', Req}]) ->
 	    8000
     end,
     {ok, EventMgr} = gen_event:start_link(),
-    send_message(#msg{ content = SessionId }, Req),
+    socketio_client:send(self(), #msg{ content = SessionId }),
     {ok, #state{
        session_id = SessionId,
-       connection_reference = {'xhr-polling', none},
+       connection_reference = {'xhr-polling', Req, Server},
        polling_duration = PollingDuration,
        close_timeout = CloseTimeout,
        event_manager = EventMgr,
