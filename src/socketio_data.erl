@@ -46,10 +46,10 @@ body(Length, ?JSON_FRAME++Body) ->
     json(Length-3, Body);
 body(Length, ?HEARTBEAT_FRAME++Body) ->
     heartbeat(Length-3, Body, []);
-body(Length, Body) when length(Body) >= Length ->
+body(Length, Body) ->
     #msg{content=lists:sublist(Body, Length)}.
 
-json(Length, Body) when length(Body) >= Length ->
+json(Length, Body) ->
     Object = lists:sublist(Body, Length),
     #msg{content=jsx:json_to_term(list_to_binary(Object)), json=true}.
 
