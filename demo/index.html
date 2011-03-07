@@ -8,8 +8,7 @@
 
     <script type="text/javascript">
       function init() {
-      var h = location.host.split(":")[0];
-      socket = new io.Socket(h);
+      socket = new io.Socket(location.hostname);
       socket.on('message', function(data){
          console.log(data);
       });
