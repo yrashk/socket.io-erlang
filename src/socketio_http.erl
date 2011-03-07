@@ -153,6 +153,24 @@ handle_call({request, 'POST', ["send", SessionId, "xhr-multipart"|Resource], Req
         end,
     {reply, Response, State};
 
+
+%% New htmlfile request
+handle_call({request, 'GET', [_Random, "htmlfile"|Resource], Req }, _From, #state{ resource = Resource} = State) ->
+    handle_call({session, generate, {'htmlfile', Req}, socketio_transport_htmlfile}, _From, State),
+    {noreply, State};
+
+%% Incoming htmlfile data
+handle_call({request, 'POST', ["send", SessionId, "htmlfile"|Resource], Req }, _From, #state{ resource = Resource, sessions = Sessions } = State) ->
+    Response =  
+        case ets:lookup(Sessions, SessionId) of
+            [{SessionId, Pid}] -> 
+                gen_server:call(Pid, {'htmlfile', data, Req});
+            _ ->
+                Req:respond(404, "")
+        end,
+    {reply, Response, State};
+
+
 %% If we can't route it, let others deal with it
 handle_call({request, _Method, _Path, _Req} = Req, From, #state{ default_http_handler = HttpHandler } = State) when is_atom(HttpHandler) ->
     handle_call(Req, From, State#state{ default_http_handler = fun(P1, P2, P3) -> HttpHandler:handle_request(P1, P2, P3) end });
