@@ -243,9 +243,8 @@ send_message(Message, Req, Index, Sup) ->
 send_message_1(Headers, Message, Req, Index) ->
     Headers0 = [{"Content-Type", "text/javascript; charset=UTF-8"}|Headers],
     %% FIXME: There must be a better way of escaping Javascript?
-    [_|Rest] = binary_to_list(jsx:term_to_json([list_to_binary(Message)])),
-    [_|Message0] = lists:reverse(Rest),
-    Message1 = "io.JSONP["++Index++"]._("++lists:reverse(Message0)++");",
+    Message0 = binary_to_list(jsx:term_to_json(list_to_binary(Message), [{strict, false}])),
+    Message1 = "io.JSONP["++Index++"]._(" ++ Message0 ++ ");",
     Req:ok(Headers0, Message1).
 
 cors_headers(Headers, Sup) ->

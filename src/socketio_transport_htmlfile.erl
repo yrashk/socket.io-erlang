@@ -215,7 +215,6 @@ send_message(#heartbeat{} = Message, Req) ->
 
 send_message(Message, Req) ->
     %% FIXME: There must be a better way of escaping Javascript?
-    M0 =  binary_to_list(jsx:term_to_json([list_to_binary(Message)])),
-    Message0 = string:strip(string:strip(M0, left, $[), right, $]),
+    Message0 =  binary_to_list(jsx:term_to_json(list_to_binary(Message), [{strict, false}])),
     M = "<script>parent.s._(" ++ Message0 ++ ", document);</script>",
     Req:stream({chunk, M}).
