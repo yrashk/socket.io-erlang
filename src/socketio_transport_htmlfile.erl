@@ -138,7 +138,7 @@ handle_cast({initialize, Req}, #state{ heartbeat_interval = Interval } = State) 
                       {"Connection", "Keep-Alive"},
                       {"Transfer-Encoding", "chunked"}]),
     H = "<html><body>" ++ lists:duplicate(254,$\s),
-    Req:stream(integer_to_list(length(H), 16) ++ "\r\n" ++ H ++ "\r\n"),
+    Req:stream({chunk, H}),
     {noreply, State#state{ connection_reference = {'htmlfile', connected} }, Interval};
 
 handle_cast(heartbeat, #state{ heartbeats = Beats,
@@ -218,4 +218,4 @@ send_message(Message, Req) ->
     M0 =  binary_to_list(jsx:term_to_json([list_to_binary(Message)])),
     Message0 = string:strip(string:strip(M0, left, $[), right, $]),
     M = "<script>parent.s._(" ++ Message0 ++ ", document);</script>",
-    Req:stream(integer_to_list(length(M), 16) ++ "\r\n" ++ M ++ "\r\n").
+    Req:stream({chunk, M}).
