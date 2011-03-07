@@ -13,22 +13,24 @@
 %% Result: Frame ++ Length of Message ++ Frame ++ Message
 -define(FRAME, "~m~").
 -define(JSON_FRAME, "~j~").
+-define(JSON_FRAME_LENGTH, 3).
 -define(HEARTBEAT_FRAME, "~h~").
+-define(HEARTBEAT_FRAME_LENGTH, 3).
 
 
 encode(#msg{ content = Content, json = false }) when is_list(Content) ->
     Length = integer_to_list(length(Content)),
-    "~m~" ++ Length ++ "~m~" ++ Content;
+    ?FRAME ++ Length ++ ?FRAME ++ Content;
 
 encode(#msg{ content = Content, json = true }) ->
     JSON = binary_to_list(jsx:term_to_json(Content)),
-    Length = integer_to_list(length(JSON) + 3),
-    "~m~" ++ Length ++ "~m~~j~" ++ JSON;
+    Length = integer_to_list(length(JSON) + ?JSON_FRAME_LENGTH),
+    ?FRAME ++ Length ++ ?FRAME ++ ?JSON_FRAME ++ JSON;
 
 encode(#heartbeat{ index = Index }) ->
     String = integer_to_list(Index),
-    Length = integer_to_list(length(String) + 3),
-    "~m~" ++ Length ++ "~m~~h~" ++ String.
+    Length = integer_to_list(length(String) + ?HEARTBEAT_FRAME_LENGTH),
+    ?FRAME ++ Length ++ ?FRAME ++ ?HEARTBEAT_FRAME ++ String.
 
 decode(#msg{content=Str}) when is_list(Str) ->
     header(Str).
@@ -43,15 +45,15 @@ header([N|Rest], Acc) when N >= $0, N =< $9 ->
     header(Rest, [N|Acc]).
 
 body(Length, ?JSON_FRAME++Body) ->
-    json(Length-3, Body);
+    json(Length-?JSON_FRAME_LENGTH, Body);
 body(Length, ?HEARTBEAT_FRAME++Body) ->
-    heartbeat(Length-3, Body, []);
+    heartbeat(Length-?HEARTBEAT_FRAME_LENGTH, Body, []);
 body(Length, Body) ->
     #msg{content=lists:sublist(Body, Length)}.
 
 json(Length, Body) ->
     Object = lists:sublist(Body, Length),
-    #msg{content=jsx:json_to_term(list_to_binary(Object)), json=true}.
+    #msg{content=jsx:json_to_term(list_to_binary(Object), [{strict,false}]), json=true}.
 
 heartbeat(0, _, Acc) -> #heartbeat{index=list_to_integer(lists:reverse(Acc))};
 heartbeat(Length, [N|Rest], Acc) when N >= $0, N =< $9 ->
