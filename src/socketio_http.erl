@@ -275,6 +275,9 @@ handle_websocket(Server, Resource, Ws) ->
     WsResource = string:tokens(WsPath,"/"),
     handle_websocket_1(Server, Resource, lists:reverse(WsResource), Ws).
 
+handle_websocket_1(Server, Resource, ["flashsocket"|Resource], Ws) ->
+    handle_websocket_1(Server, Resource, ["websocket"|Resource], Ws);
+
 handle_websocket_1(Server, Resource, ["websocket"|Resource], Ws) ->
     {SessionID, Pid} = gen_server:call(Server, {session, generate, {websocket, Ws}, socketio_transport_websocket}),
     handle_websocket(Server, Ws, SessionID, Pid);
