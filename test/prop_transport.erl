@@ -15,16 +15,6 @@ prop_sanity_msg() ->
         )
      end).
 
-prop_stream_parse_msg() ->
-    ?FORALL({Str, N}, gen_stream(gen_encoded_msg()),
-     begin
-        {Start, End} = lists:split(N, Str),
-        #msg{content = Decoded} = socketio_data:decode(#msg{content=Str}),
-        {incomplete, F} = socketio_data:decode(#msg{content=Start}),
-        #msg{content = StreamDecoded} = F(End),
-        equals(Decoded, StreamDecoded)
-     end).
-
 prop_sanity_heartbeat() ->
     ?FORALL(N, heartbeat(),
       begin
@@ -35,16 +25,6 @@ prop_sanity_heartbeat() ->
             io:format("~p =/= ~p~n", [N, Parsed]),
             N =:= Parsed
         )
-      end).
-
-prop_stream_parse_heartbeat() ->
-    ?FORALL({Str, N}, gen_stream(gen_encoded_heartbeat()),
-      begin
-        {Start, End} = lists:split(N, Str),
-        #heartbeat{index = Decoded} = socketio_data:decode(#msg{content=Str}),
-        {incomplete, F} = socketio_data:decode(#msg{content=Start}),
-        #heartbeat{index = StreamDecoded} = F(End),
-        equals(Decoded, StreamDecoded)
       end).
 
 prop_sanity_json() ->
@@ -59,47 +39,8 @@ prop_sanity_json() ->
         )
       end).
 
-prop_stream_parse_json() ->
-    ?FORALL({Str, N}, gen_stream(gen_encoded_json()),
-      begin
-        {Start, End} = lists:split(N, Str),
-        #msg{content=Decoded, json=true} = socketio_data:decode(#msg{content=Str}),
-        {incomplete, F} = socketio_data:decode(#msg{content=Start}),
-        #msg{content=StreamDecoded, json=true} = F(End),
-        equals(Decoded, StreamDecoded)
-      end).
-
 %%% GENERATORS
 %% generates strings with a more certain presence of escape characters
-gen_stream(T) ->
-    ?LET(Str, T,
-      begin
-        L = length(Str),
-        {Str, choose(1,L-1)}
-      end).
-
-gen_encoded_msg() ->
-    ?LET(Str, gen_string(),
-      begin
-        S = eval(Str),
-        String = #msg{content=S},
-        socketio_data:encode(String)
-      end).
-
-gen_encoded_heartbeat() ->
-    ?LET(N, heartbeat(),
-      begin
-        Hb = #heartbeat{index=N},
-        socketio_data:encode(Hb)
-      end).
-
-gen_encoded_json() ->
-    ?LET(Term, json(),
-      begin
-        J = #msg{content=Term, json=true},
-        socketio_data:encode(J)
-      end).
-
 gen_string() ->
     ?LAZY(weighted_union([
         {1, []},

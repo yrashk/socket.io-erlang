@@ -13,84 +13,49 @@
 %% Result: Frame ++ Length of Message ++ Frame ++ Message
 -define(FRAME, "~m~").
 -define(JSON_FRAME, "~j~").
+-define(JSON_FRAME_LENGTH, 3).
 -define(HEARTBEAT_FRAME, "~h~").
+-define(HEARTBEAT_FRAME_LENGTH, 3).
 
 
 encode(#msg{ content = Content, json = false }) when is_list(Content) ->
     Length = integer_to_list(length(Content)),
-    "~m~" ++ Length ++ "~m~" ++ Content;
+    ?FRAME ++ Length ++ ?FRAME ++ Content;
 
 encode(#msg{ content = Content, json = true }) ->
     JSON = binary_to_list(jsx:term_to_json(Content)),
-    Length = integer_to_list(length(JSON) + 3),
-    "~m~" ++ Length ++ "~m~~j~" ++ JSON;
+    Length = integer_to_list(length(JSON) + ?JSON_FRAME_LENGTH),
+    ?FRAME ++ Length ++ ?FRAME ++ ?JSON_FRAME ++ JSON;
 
 encode(#heartbeat{ index = Index }) ->
     String = integer_to_list(Index),
-    Length = integer_to_list(length(String) + 3),
-    "~m~" ++ Length ++ "~m~~h~" ++ String.
+    Length = integer_to_list(length(String) + ?HEARTBEAT_FRAME_LENGTH),
+    ?FRAME ++ Length ++ ?FRAME ++ ?HEARTBEAT_FRAME ++ String.
 
 decode(#msg{content=Str}) when is_list(Str) ->
     header(Str).
 
 header(?FRAME ++ Rest) ->
-    header(Rest, []);
-header(L = [$~|_]) ->
-    {incomplete, fun(S) -> header(L++S) end}.
+    header(Rest, []).
 
 header(?FRAME ++ Rest=[_|_], Acc)->
     Length = list_to_integer(lists:reverse(Acc)),
     body(Length, Rest);
 header([N|Rest], Acc) when N >= $0, N =< $9 ->
-    header(Rest, [N|Acc]);
-header(L, Acc) when L =:= []; L =:= "~"; L =:= "~m" -> %% Breaking them macros
-    {incomplete, fun(S) -> header(L ++ S, Acc) end}.
+    header(Rest, [N|Acc]).
 
 body(Length, ?JSON_FRAME++Body) ->
-    json(Length-3, Body);
+    json(Length-?JSON_FRAME_LENGTH, Body);
 body(Length, ?HEARTBEAT_FRAME++Body) ->
-    heartbeat(Length-3, Body, []);
-%% The 3 following clause avoid matching JSON or Heartbeats as messages
-%% In the case of streaming.
-body(Length, []) when Length > 3 ->
-    {incomplete, fun(S) -> body(Length, S) end};
-body(Length, L=[_]) when Length > 3 ->
-    {incomplete, fun(S) -> body(Length, L++S) end};
-body(Length, L=[_,_]) when Length > 3 ->
-    {incomplete, fun(S) -> body(Length, L++S) end};
-body(Length, Body) when length(Body) >= Length ->
-    #msg{content=lists:sublist(Body, Length)};
-body(Length, Body) ->  %% Return a continuation
-    LengthRemaining = Length - length(Body),
-    {incomplete,
-     fun(Input) -> body_stream(LengthRemaining, Input, Body) end}.
+    heartbeat(Length-?HEARTBEAT_FRAME_LENGTH, Body, []);
+body(Length, Body) ->
+    #msg{content=lists:sublist(Body, Length)}.
 
-body_stream(Length, Input, PartialBody) ->
-    NewPartial = lists:sublist(Input, Length),
-    Body = [PartialBody, NewPartial],
-    case Length - length(NewPartial) of
-        0 -> #msg{content=lists:flatten(Body)};
-        N when is_integer(N), N > 0 ->
-            {incomplete,
-             fun(NewInput) -> body_stream(N, NewInput, Body) end}
-    end.
-
-json(Length, Body) when length(Body) >= Length ->
+json(Length, Body) ->
     Object = lists:sublist(Body, Length),
-    #msg{content=jsx:json_to_term(list_to_binary(Object)), json=true};
-%% This stops caring about the content lenght. Maybe we should care about it,
-%% by mixing in the protocol and json stuff
-json(_Length, Body) ->
-    wrap(jsx:json_to_term(list_to_binary(Body), [{stream,true}])).
-
-wrap({incomplete, F}) ->
-    {incomplete, fun(Txt) -> wrap(F(list_to_binary(Txt))) end};
-wrap(X) ->
-    #msg{content=X, json=true}.
+    #msg{content=jsx:json_to_term(list_to_binary(Object), [{strict,false}]), json=true}.
 
 heartbeat(0, _, Acc) -> #heartbeat{index=list_to_integer(lists:reverse(Acc))};
-heartbeat(Length, [], Acc) ->
-    {incomplete, fun(Str) -> heartbeat(Length, Str, Acc) end};
 heartbeat(Length, [N|Rest], Acc) when N >= $0, N =< $9 ->
     heartbeat(Length-1, Rest, [N|Acc]).
 
