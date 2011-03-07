@@ -214,7 +214,6 @@ send_message(#heartbeat{} = Message, Req) ->
     send_message(socketio_data:encode(Message), Req);
 
 send_message(Message, Req) ->
-    %% FIXME: There must be a better way of escaping Javascript?
     Message0 =  binary_to_list(jsx:term_to_json(list_to_binary(Message), [{strict, false}])),
     M = "<script>parent.s._(" ++ Message0 ++ ", document);</script>",
     Req:stream({chunk, M}).
