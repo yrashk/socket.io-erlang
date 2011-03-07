@@ -6,7 +6,8 @@
 
     <script type="text/javascript">
       function init() {
-      socket = new io.Socket('localhost', {transports: ["jsonp-polling"],rememberTransport: false});
+      var h = location.host.split(":")[0];
+      socket = new io.Socket(h);
       socket.on('message', function(data){
          console.log(data);
       });
