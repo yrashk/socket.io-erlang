@@ -86,7 +86,7 @@ handle_request('GET', [], Req) ->
            "socket = new io.Socket('localhost', {" ++ Transports ++ ", rememberTransport: false});\n"
            
            "socket.on('message',function(data){\n"
-           "if (data=='socketio_close') { window.close(); }\n"
+           "if (data=='socketio_close') { window.close(); } else \n"
            "if (data=='socketio_session') { socket.send(socket.transport.sessionid) } else {\n"
            "socket.send(data);\n"
            "}\n"
