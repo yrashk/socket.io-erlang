@@ -183,7 +183,7 @@ handle_info({'EXIT',_Port,_Reason}, #state{ close_timeout = ServerTimeout} = Sta
     {noreply, State#state { connection_reference = {'xhr-multipart', none}}, ServerTimeout};
 
 handle_info(timeout, #state{ connection_reference = {'xhr-multipart', none} } = State) ->
-    {noreply, State};
+    {stop, shutdown, State};
 
 handle_info(timeout, State) ->
     gen_server:cast(self(), heartbeat),
