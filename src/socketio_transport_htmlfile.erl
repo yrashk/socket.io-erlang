@@ -138,6 +138,7 @@ handle_cast({initialize, Req}, #state{ heartbeat_interval = Interval } = State) 
                       {"Connection", "Keep-Alive"},
                       {"Transfer-Encoding", "chunked"}]),
     H = "<html><body>" ++ lists:duplicate(254,$\s),
+    link(Req:get(socket)),
     Req:stream({chunk, H}),
     {noreply, State#state{ connection_reference = {'htmlfile', connected} }, Interval};
 
@@ -170,7 +171,7 @@ handle_info({'EXIT',_Port,_Reason}, #state{ close_timeout = ServerTimeout} = Sta
     {noreply, State#state { connection_reference = {'htmlfile', none}}, ServerTimeout};
 
 handle_info(timeout, #state{ connection_reference = {'htmlfile', none} } = State) ->
-    {noreply, State};
+    {stop, shutdown, State};
 
 handle_info(timeout, State) ->
     gen_server:cast(self(), heartbeat),
