@@ -1,4 +1,4 @@
--module(socketio_transport_xhr_polling).
+-module(socketio_transport_polling).
 -include_lib("../include/socketio.hrl").
 -behaviour(gen_server).
 
@@ -17,6 +17,7 @@
           connection_reference,
 	  req,
 	  reply_to,
+	  index,
           polling_duration,
           close_timeout,
           event_manager,
@@ -52,7 +53,7 @@ start_link(Sup, SessionId, ConnectionReference) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Sup, SessionId, {'xhr-polling', Req}]) ->
+init([Sup, SessionId, {TransportType, {Req, Index}}]) ->
     process_flag(trap_exit, true),
     PollingDuration = 
     case application:get_env(polling_duration) of
@@ -69,15 +70,21 @@ init([Sup, SessionId, {'xhr-polling', Req}]) ->
 	    8000
     end,
     {ok, EventMgr} = gen_event:start_link(),
-    send_message(#msg{content = SessionId}, Req, Sup),
-    {ok, #state{
+    send_message(#msg{content = SessionId}, Req, Index, Sup),
+    {ok, #state {
        session_id = SessionId,
-       connection_reference = {'xhr-polling', none},
+       connection_reference = {TransportType, none},
+       req = Req,
+       index = Index,
        polling_duration = PollingDuration,
        close_timeout = CloseTimeout,
        event_manager = EventMgr,
        sup = Sup
-      }}.
+      }};
+
+init([Sup, SessionId, {TransportType, Req}]) ->
+    init([Sup, SessionId, {TransportType, {Req, undefined}}]).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -94,18 +101,26 @@ init([Sup, SessionId, {'xhr-polling', Req}]) ->
 %% @end
 %%--------------------------------------------------------------------
 %% Incoming data
-handle_call({'xhr-polling', data, Req}, _From, #state{ event_manager = EventManager } = State) ->
+handle_call({_TransportType, data, Req}, _From, #state{ event_manager = EventManager, sup = Sup } = State) ->
     Data = Req:parse_post(),
     Self = self(),
-    lists:foreach(fun({"data", M}) ->
-        spawn(fun () ->
-            F = fun(#heartbeat{}) -> ignore;
-                   (M0) -> gen_event:notify(EventManager, {message, Self,  M0})
-            end,
-            F(socketio_data:decode(#msg{content=M}))
-        end)
-    end, Data),
-    Response = Req:ok("ok"),
+    Response =
+	case cors_headers(Req:get(headers), Sup) of
+	    {false, _Headers} ->
+		Req:respond(405, "unauthorized");
+	    {_, Headers0} ->
+		Data = Req:parse_post(),
+		Self = self(),
+    		lists:foreach(fun({"data", M}) ->
+    				      spawn(fun () ->
+    						    F = fun(#heartbeat{}) -> ignore;
+    							   (M0) -> gen_event:notify(EventManager, {message, Self,  M0})
+    							end,
+    						    F(socketio_data:decode(#msg{content=M}))
+    					    end)
+    			      end, Data),
+		Req:ok([Headers0|[{"Content-Type", "text/plain"}]], "ok")
+	end,
     {reply, Response, State};
 
 %% Event management
@@ -132,22 +147,24 @@ handle_call(stop, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 %% Polling
-handle_cast({'xhr-polling', polling_request, Req, Server}, #state { polling_duration = Interval, message_buffer = [] } = State) ->
+handle_cast({TransportType, polling_request, {Req, Index}, Server}, State) ->
+    handle_cast({TransportType, polling_request, Req, Server}, State#state{ index = Index});
+handle_cast({TransportType, polling_request, Req, Server}, #state { polling_duration = Interval, message_buffer = [] } = State) ->
     link(Req:get(socket)),
-    {noreply, State#state{ connection_reference = {'xhr-polling', connected}, req = Req, reply_to = Server }, Interval};
+    {noreply, State#state{ connection_reference = {TransportType, connected}, req = Req, reply_to = Server }, Interval};
 
-handle_cast({'xhr-polling', polling_request, Req, Server}, #state { message_buffer = Buffer } = State) ->
+handle_cast({TransportType, polling_request, Req, Server}, #state { message_buffer = Buffer } = State) ->
     link(Req:get(socket)),
-    handle_cast({send, {buffer, Buffer}}, State#state{ connection_reference = {'xhr-polling', connected},
-						       req = Req, reply_to = Server, message_buffer = [] });
+    handle_cast({send, {buffer, Buffer}}, State#state{ connection_reference = {TransportType, connected},
+						       req = Req, reply_to = Server, message_buffer = []});
 
-%% Send
-handle_cast({send, Message}, #state{ connection_reference = {'xhr-polling', none}, message_buffer = Buffer } = State) ->
+%% Send to client
+handle_cast({send, Message}, #state{ connection_reference = {_TransportType, none}, message_buffer = Buffer } = State) ->
     {noreply, State#state{ message_buffer = lists:append(Buffer, [Message])}};
 
-handle_cast({send, Message}, #state{ connection_reference = {'xhr-polling', connected }, req = Req, reply_to = Caller, sup = Sup} = State) ->
-    gen_server:reply(Caller, send_message(Message, Req, Sup)),
-    {noreply, State#state{ connection_reference = {'xhr-polling', none}}};
+handle_cast({send, Message}, #state{ connection_reference = {TransportType, connected }, req = Req, reply_to = Caller, index = Index, sup = Sup} = State) -> %% FIXME: SOLUTION FOR BELOW IS TO MATCH ON INDEX=UNDEF HERE
+    gen_server:reply(Caller, send_message(Message, Req, Index, Sup)),
+    {noreply, State#state{ connection_reference = {TransportType, none}}};
 
 handle_cast(_, State) ->
     {noreply, State}.
@@ -163,12 +180,12 @@ handle_cast(_, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({'EXIT',_Port,_Reason}, #state{ connection_reference = {'xhr-polling', _ }, close_timeout = CloseTimeout} = State) when is_port(_Port) ->
-    {noreply, State#state { connection_reference = {'xhr-polling', none}}, CloseTimeout};
+handle_info({'EXIT',_Port,_Reason}, #state{ connection_reference = {TransportType, _ }, close_timeout = CloseTimeout} = State) when is_port(_Port) ->
+    {noreply, State#state { connection_reference = {TransportType, none}}, CloseTimeout};
 
 %% Connection has timed out
-handle_info(timeout, #state{ connection_reference = {'xhr-polling', connected}, reply_to = Caller, req = Req, sup = Sup } = State) ->
-    gen_server:reply(Caller, send_message("", Req, Sup)),
+handle_info(timeout, #state{ connection_reference = {_TransportType, connected}, reply_to = Caller, req = Req, index = Index, sup = Sup } = State) ->
+    gen_server:reply(Caller, send_message("", Req, Index, Sup)),
     {noreply, State};
 
 %% Client has timed out
@@ -206,10 +223,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-send_message(#msg{} = Message, Req, Sup) ->
-    send_message(socketio_data:encode(Message), Req, Sup);
+send_message(#msg{} = Message, Req, Index, Sup) ->
+    send_message(socketio_data:encode(Message), Req, Index, Sup);
 
-send_message({buffer, Messages}, Req, Sup) ->
+send_message({buffer, Messages}, Req, Index, Sup) ->
     Messages0 = lists:map(fun(M) ->
 				  case M of
 				      #msg{} ->
@@ -218,10 +235,9 @@ send_message({buffer, Messages}, Req, Sup) ->
 					  M
 				  end
 			  end, Messages),
-    send_message(Messages0, Req, Sup);
+    send_message(Messages0, Req, Index, Sup);
 
-%% TODO: Add case
-send_message(Message, Req, Sup) ->
+send_message(Message, Req, undefined, Sup) ->
     Headers = [{"Connection", "keep-alive"}],
     Headers0 =
 	case cors_headers(Req:get(headers), Sup) of
@@ -230,7 +246,22 @@ send_message(Message, Req, Sup) ->
 	    {_, Headers1} ->
 		[Headers1|Headers]
 	end,
-    Req:ok(Headers0, Message).
+    Req:ok(Headers0, Message);
+
+send_message(Message, Req, Index, Sup) ->
+    Headers = [{"Connection", "keep-alive"}],
+    case cors_headers(Req:get(headers), Sup) of
+	{false, _} ->
+	    Req:ok("alert('Cross domain security restrictions not met');");
+	{_, Headers0} ->
+	    send_message_1([Headers0|Headers], Message, Req, Index)
+	end.
+
+send_message_1(Headers, Message, Req, Index) ->
+    Headers0 = [{"Content-Type", "text/javascript; charset=UTF-8"}|Headers],
+    Message0 = binary_to_list(jsx:term_to_json(list_to_binary(Message), [{strict, false}])),
+    Message1 = "io.JSONP["++Index++"]._(" ++ Message0 ++ ");",
+    Req:ok(Headers0, Message1).
 
 cors_headers(Headers, Sup) ->
     case proplists:get_value('Origin', Headers) of
