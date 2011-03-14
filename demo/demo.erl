@@ -8,6 +8,7 @@
 main(_) ->
     appmon:start(),
     application:start(sasl),
+    application:start(misultin),
     application:start(socketio),
     {ok, Pid} = socketio_listener:start([{http_port, 7878}, 
                                          {default_http_handler,?MODULE}]),

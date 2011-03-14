@@ -6,7 +6,8 @@
   {agner, [{requires, [{"misultin","@mixultin"},"ossp_uuid","jsx","proper","ex_uri"]}]},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+		  misultin
                  ]},
   {mod, { socketio_app, []}},
   {env, [ {heartbeat_interval, 10000} ]}

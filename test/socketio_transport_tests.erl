@@ -46,7 +46,8 @@ transport_tests(Browser, Transport) ->
                   ets:new(socketio_tests, [public, named_table]),
                   ets:insert(socketio_tests, {transport, Transport}),
                   error_logger:delete_report_handler(error_logger_tty_h), %% suppress annoying kernel logger
-                  application:start(socketio),
+                  application:start(misultin),
+		  application:start(socketio),
                   {ok, Pid} = socketio_listener:start([{http_port, 8989}, 
                                                        {default_http_handler, ?MODULE}]),
                   EventMgr = socketio_listener:event_manager(Pid),
