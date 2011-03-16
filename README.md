@@ -1,21 +1,23 @@
 Socket.IO for Erlang
 ====================
 
-## what is socket.io for Erlang?
-
-*TODO: add description*
-
-### socket.io
+## Socket.IO
 
 [Socket.IO](http://socket.io/) aims to make realtime apps possible in every browser and mobile device, blurring the differences between the different transport mechanisms.
 
+## What is socket.io for Erlang?
 
+Socket.IO-erlang is a full-blown socket.io server reimplementation in
+Erlang that is fully compatible with socket.io's javascript client
+library.
 
+## How to use
 
+For the time being, take a look at demo/demo.erl
 
-## Dependencies
+## Building
 
-You need crypto/ssl support in Erlang or you will get errors like this:
+Depending on a way you have your Erlang distribution installed, you might need crypto/ssl support in Erlang or you will get errors like this:
 
     Uncaught error in rebar_core: {'EXIT',
                                       {undef,
@@ -31,12 +33,14 @@ You need crypto/ssl support in Erlang or you will get errors like this:
 see [https://github.com/basho/riak_wiki/issues/45](https://github.com/basho/riak_wiki/issues/45)
 
 ### OSX: 
-Installing SSL for Erlang:
+If you use MacPorts to install Erlang instead of Homebrew or manual builds, this is how you install SSL for Erlang:
 
     sudo port install erlang +ssl
 
 ### Linux
-Make sure you have the erlang-crypto and erlang-dev packages installed if you're on Debian, erlang-crypto and erlang-devel on Redhat/Fedora.
+Make sure you have the erlang-crypto and erlang-dev packages installed if you're on Debian, erlang-crypto and erlang-devel on Redhat/Fedora. Or better yet, consider building
+your Erlang manually, as Erlang packages in Linux distro tend to be
+either outdated or broken. Or both.
 
 ## TODO
 
