@@ -39,7 +39,7 @@ If you use MacPorts to install Erlang instead of Homebrew or manual builds, this
 
 ### Linux
 Make sure you have the erlang-crypto and erlang-dev packages installed if you're on Debian, erlang-crypto and erlang-devel on Redhat/Fedora. Or better yet, consider building
-your Erlang manually, as Erlang packages in Linux distro tend to be
+your Erlang manually, as Erlang packages in Linux distros tend to be
 either outdated or broken. Or both.
 
 ## TODO
