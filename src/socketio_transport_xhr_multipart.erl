@@ -14,6 +14,7 @@
 -record(state, {
           session_id,
           req,
+	  caller,
           connection_reference,
           heartbeats = 0,
           heartbeat_interval,
@@ -51,7 +52,7 @@ start_link(Sup, SessionId, ConnectionReference) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Sup, SessionId, {'xhr-multipart', Req}]) ->
+init([Sup, SessionId, {'xhr-multipart', {Req, Caller}}]) ->
     process_flag(trap_exit, true),
     HeartbeatInterval = 
     case application:get_env(heartbeat_interval) of
@@ -75,6 +76,7 @@ init([Sup, SessionId, {'xhr-multipart', Req}]) ->
        session_id = SessionId,
        connection_reference = {'xhr-multipart', none},
        req = Req,
+       caller = Caller,
        close_timeout = CloseTimeout,
        heartbeat_interval = HeartbeatInterval,
        event_manager = EventMgr,
@@ -182,7 +184,8 @@ handle_cast(_, #state{} = State) ->
 handle_info({'EXIT',_Port,_Reason}, #state{ close_timeout = ServerTimeout} = State) when is_port(_Port) ->
     {noreply, State#state { connection_reference = {'xhr-multipart', none}}, ServerTimeout};
 
-handle_info(timeout, #state{ connection_reference = {'xhr-multipart', none} } = State) ->
+handle_info(timeout, #state{ connection_reference = {'xhr-multipart', none}, caller = Caller } = State) ->
+    gen_server:call(Caller, connection_gone),
     {stop, shutdown, State};
 
 handle_info(timeout, State) ->

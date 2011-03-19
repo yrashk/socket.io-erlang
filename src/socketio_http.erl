@@ -138,8 +138,8 @@ handle_call({request, 'POST', [_Index, _Random, SessionId, "jsonp-polling"|Resou
     {reply, Response, State};
 
 %% New XHR Multipart request
-handle_call({request, 'GET', ["xhr-multipart"|Resource], Req }, _From, #state{ resource = Resource} = State) ->
-    handle_call({session, generate, {'xhr-multipart', Req}, socketio_transport_xhr_multipart}, _From, State),
+handle_call({request, 'GET', ["xhr-multipart"|Resource], Req }, From, #state{ resource = Resource} = State) ->
+    handle_call({session, generate, {'xhr-multipart', {Req, From}}, socketio_transport_xhr_multipart}, From, State),
     {noreply, State};
 
 %% Incoming XHR Multipart data
@@ -155,8 +155,8 @@ handle_call({request, 'POST', ["send", SessionId, "xhr-multipart"|Resource], Req
 
 
 %% New htmlfile request
-handle_call({request, 'GET', [_Random, "htmlfile"|Resource], Req }, _From, #state{ resource = Resource} = State) ->
-    handle_call({session, generate, {'htmlfile', Req}, socketio_transport_htmlfile}, _From, State),
+handle_call({request, 'GET', [_Random, "htmlfile"|Resource], Req }, From, #state{ resource = Resource} = State) ->
+    handle_call({session, generate, {'htmlfile', {Req, From}}, socketio_transport_htmlfile}, From, State),
     {noreply, State};
 
 %% Incoming htmlfile data

@@ -16,7 +16,7 @@
           message_buffer = [],
           connection_reference,
 	  req,
-	  reply_to,
+	  caller,
 	  index,
           polling_duration,
           close_timeout,
@@ -151,18 +151,18 @@ handle_cast({TransportType, polling_request, {Req, Index}, Server}, State) ->
     handle_cast({TransportType, polling_request, Req, Server}, State#state{ index = Index});
 handle_cast({TransportType, polling_request, Req, Server}, #state { polling_duration = Interval, message_buffer = [] } = State) ->
     link(Req:get(socket)),
-    {noreply, State#state{ connection_reference = {TransportType, connected}, req = Req, reply_to = Server }, Interval};
+    {noreply, State#state{ connection_reference = {TransportType, connected}, req = Req, caller = Server }, Interval};
 
 handle_cast({TransportType, polling_request, Req, Server}, #state { message_buffer = Buffer } = State) ->
     link(Req:get(socket)),
     handle_cast({send, {buffer, Buffer}}, State#state{ connection_reference = {TransportType, connected},
-						       req = Req, reply_to = Server, message_buffer = []});
+						       req = Req, caller = Server, message_buffer = []});
 
 %% Send to client
 handle_cast({send, Message}, #state{ connection_reference = {_TransportType, none}, message_buffer = Buffer } = State) ->
     {noreply, State#state{ message_buffer = lists:append(Buffer, [Message])}};
 
-handle_cast({send, Message}, #state{ connection_reference = {TransportType, connected }, req = Req, reply_to = Caller, index = Index, sup = Sup} = State) -> %% FIXME: SOLUTION FOR BELOW IS TO MATCH ON INDEX=UNDEF HERE
+handle_cast({send, Message}, #state{ connection_reference = {TransportType, connected }, req = Req, caller = Caller, index = Index, sup = Sup} = State) -> %% FIXME: SOLUTION FOR BELOW IS TO MATCH ON INDEX=UNDEF HERE
     gen_server:reply(Caller, send_message(Message, Req, Index, Sup)),
     {noreply, State#state{ connection_reference = {TransportType, none}}};
 
@@ -184,12 +184,13 @@ handle_info({'EXIT',_Port,_Reason}, #state{ connection_reference = {TransportTyp
     {noreply, State#state { connection_reference = {TransportType, none}}, CloseTimeout};
 
 %% Connection has timed out
-handle_info(timeout, #state{ connection_reference = {_TransportType, connected}, reply_to = Caller, req = Req, index = Index, sup = Sup } = State) ->
+handle_info(timeout, #state{ connection_reference = {_TransportType, connected}, caller = Caller, req = Req, index = Index, sup = Sup } = State) ->
     gen_server:reply(Caller, send_message("", Req, Index, Sup)),
     {noreply, State};
 
 %% Client has timed out
-handle_info(timeout, State) ->
+handle_info(timeout, #state{ caller = Caller } = State) ->
+    gen_server:call(Caller, connection_gone),
     {stop, shutdown, State};
 
 handle_info(_Info, State) ->
