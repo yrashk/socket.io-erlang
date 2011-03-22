@@ -16,6 +16,7 @@
           sessions,
           event_manager,
           sup,
+	  web_server_monitor,
           resource
          }).
 
@@ -51,17 +52,18 @@ start_link(Port, Resource, DefaultHttpHandler, Sup) ->
 init([Port, Resource, DefaultHttpHandler, Sup]) ->
     Self = self(),
     process_flag(trap_exit, true),
-    misultin:start_link([{port, Port},
-                         {loop, fun (Req) -> handle_http(Self, Req) end},
-                         {ws_loop, fun (Ws) -> handle_websocket(Self, Resource, Ws) end},
-                         {ws_autoexit, false}
-                        ]),
-    erlang:monitor(process, misultin),
+    {ok, MisultinPid} = misultin:start_link([{port, Port},
+					     {loop, fun (Req) -> handle_http(Self, Req) end},
+					     {ws_loop, fun (Ws) -> handle_websocket(Self, Resource, Ws) end},
+					     {ws_autoexit, false}
+					    ]),
+    WebServerRef = erlang:monitor(process, MisultinPid),
     gen_server:cast(Self, acquire_event_manager),
     {ok, #state{
        default_http_handler = DefaultHttpHandler,
        sessions = ets:new(socketio_sessions,[public]),
        sup = Sup,
+       web_server_monitor = WebServerRef,
        resource = Resource
       }}.
 
@@ -237,7 +239,7 @@ handle_info({'EXIT', Pid, _}, #state{ event_manager = EventManager, sessions = S
     {noreply, State};
 
 % If misultin goes down, we stop socket.io
-handle_info({'DOWN', _, _, {misultin, _}, _}, State) ->
+handle_info({'DOWN', WebServerRef, _, _, _}, #state{ web_server_monitor = WebServerRef } = State) ->
     {stop, normal, State};             
 
 handle_info(_Info, State) ->
