@@ -56,6 +56,7 @@ init([Port, Resource, DefaultHttpHandler, Sup]) ->
                          {ws_loop, fun (Ws) -> handle_websocket(Self, Resource, Ws) end},
                          {ws_autoexit, false}
                         ]),
+    erlang:monitor(process, misultin),
     gen_server:cast(Self, acquire_event_manager),
     {ok, #state{
        default_http_handler = DefaultHttpHandler,
@@ -234,7 +235,11 @@ handle_info({'EXIT', Pid, _}, #state{ event_manager = EventManager, sessions = S
             ignore
     end,
     {noreply, State};
-            
+
+% If misultin goes down, we stop socket.io
+handle_info({'DOWN', _, _, {misultin, _}, _}, State) ->
+    {stop, normal, State};             
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
