@@ -101,13 +101,13 @@ init([Sup, SessionId, {TransportType, Req}]) ->
 %% @end
 %%--------------------------------------------------------------------
 %% Incoming data
-handle_call({_TransportType, data, Req}, _From, #state{ event_manager = EventManager, sup = Sup } = State) ->
+handle_call({_TransportType, data, Req}, From, #state{ event_manager = EventManager, sup = Sup } = State) ->
     Data = Req:parse_post(),
     Self = self(),
     Response =
 	case cors_headers(Req:get(headers), Sup) of
 	    {false, _Headers} ->
-		Req:respond(405, "unauthorized");
+		gen_server:reply(From, Req:respond(405, "unauthorized"));
 	    {_, Headers0} ->
 		Data = Req:parse_post(),
 		Self = self(),
@@ -119,7 +119,7 @@ handle_call({_TransportType, data, Req}, _From, #state{ event_manager = EventMan
     						    F(socketio_data:decode(#msg{content=M}))
     					    end)
     			      end, Data),
-		Req:ok([Headers0|[{"Content-Type", "text/plain"}]], "ok")
+		gen_server:reply(From, Req:ok([Headers0|[{"Content-Type", "text/plain"}]], "ok"))
 	end,
     {reply, Response, State};
 
@@ -162,9 +162,10 @@ handle_cast({TransportType, polling_request, Req, Server}, #state { message_buff
 handle_cast({send, Message}, #state{ connection_reference = {_TransportType, none}, message_buffer = Buffer } = State) ->
     {noreply, State#state{ message_buffer = lists:append(Buffer, [Message])}};
 
-handle_cast({send, Message}, #state{ connection_reference = {TransportType, connected }, req = Req, caller = Caller, index = Index, sup = Sup} = State) -> %% FIXME: SOLUTION FOR BELOW IS TO MATCH ON INDEX=UNDEF HERE
+handle_cast({send, Message}, #state{ connection_reference = {TransportType, connected }, req = Req, caller = Caller,
+				     index = Index, sup = Sup, polling_duration = Interval} = State) ->
     gen_server:reply(Caller, send_message(Message, Req, Index, Sup)),
-    {noreply, State#state{ connection_reference = {TransportType, none}}};
+    {noreply, State#state{ connection_reference = {TransportType, none}}, Interval};
 
 handle_cast(_, State) ->
     {noreply, State}.
@@ -180,7 +181,7 @@ handle_cast(_, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({'EXIT',_Port,_Reason}, #state{ connection_reference = {TransportType, _ }, close_timeout = CloseTimeout} = State) when is_port(_Port) ->
+handle_info({'EXIT',Port,_Reason}, #state{ connection_reference = {TransportType, _ }, close_timeout = CloseTimeout} = State) when is_port(Port) ->
     {noreply, State#state { connection_reference = {TransportType, none}}, CloseTimeout};
 
 %% Connection has timed out
