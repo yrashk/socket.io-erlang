@@ -91,7 +91,7 @@ handle_call({websocket, Data, _Ws}, _From, #state{ heartbeat_interval = Interval
         F = fun (#heartbeat{}) -> ignore; %% FIXME: we should actually reply
                 (M) -> gen_event:notify(EventManager, {message, Self,  M})
         end,
-        F(socketio_data:decode(#msg{content=Data}))
+        [F(Msg) || Msg <- socketio_data:decode(#msg{content=Data})]
     end),
     {reply, ok, State, Interval};
 

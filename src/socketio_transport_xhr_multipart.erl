@@ -106,7 +106,7 @@ handle_call({'xhr-multipart', data, Req}, _From, #state{ heartbeat_interval = In
             F = fun(#heartbeat{}) -> ignore;
                    (M0) -> gen_event:notify(EventManager, {message, Self,  M0})
             end,
-            F(socketio_data:decode(#msg{content=M}))
+            [F(Msg) || Msg <- socketio_data:decode(#msg{content=M})]
         end)
     end, Data),
     Req:ok("ok"),

@@ -116,7 +116,7 @@ handle_call({_TransportType, data, Req}, From, #state{ event_manager = EventMana
     						    F = fun(#heartbeat{}) -> ignore;
     							   (M0) -> gen_event:notify(EventManager, {message, Self,  M0})
     							end,
-    						    F(socketio_data:decode(#msg{content=M}))
+     							[F(Msg) || Msg <- socketio_data:decode(#msg{content=M})]
     					    end)
     			      end, Data),
 		gen_server:reply(From, Req:ok([Headers0|[{"Content-Type", "text/plain"}]], "ok"))

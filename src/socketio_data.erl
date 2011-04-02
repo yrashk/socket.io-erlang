@@ -47,18 +47,22 @@ header([N|Rest], Acc) when N >= $0, N =< $9 ->
 body(Length, ?JSON_FRAME++Body) ->
     json(Length-?JSON_FRAME_LENGTH, Body);
 body(Length, ?HEARTBEAT_FRAME++Body) ->
-    heartbeat(Length-?HEARTBEAT_FRAME_LENGTH, Body, []);
+    heartbeat(Length-?HEARTBEAT_FRAME_LENGTH, Body);
 body(Length, Body) ->
-    #msg{content=lists:sublist(Body, Length)}.
+    {Current, Rest} = lists:split(Length, Body),
+    [#msg{content=Current} | handle_rest(Rest)].
 
 json(Length, Body) ->
-    Object = lists:sublist(Body, Length),
-    #msg{content=jsx:json_to_term(list_to_binary(Object), [{strict,false}]), json=true}.
+    {Object, Rest} = lists:split(Length, Body),
+    [#msg{content=jsx:json_to_term(list_to_binary(Object), [{strict,false}]), json=true} |
+     handle_rest(Rest)].
 
-heartbeat(0, _, Acc) -> #heartbeat{index=list_to_integer(lists:reverse(Acc))};
-heartbeat(Length, [N|Rest], Acc) when N >= $0, N =< $9 ->
-    heartbeat(Length-1, Rest, [N|Acc]).
+heartbeat(Length, Body) ->
+    {Heart, Rest} = lists:split(Length, Body),
+    [#heartbeat{index=list_to_integer(Heart)} | handle_rest(Rest)].
 
+handle_rest([]) -> [];
+handle_rest(X) -> decode(#msg{content=X}).
 
 %% TESTS
 -include_lib("eunit/include/eunit.hrl").
@@ -66,26 +70,26 @@ heartbeat(Length, [N|Rest], Acc) when N >= $0, N =< $9 ->
 %% For more reliable tests, see the proper module in tests/prop_transport.erl
 
 simple_msg_test() ->
-    X = decode(#msg{content="~m~11~m~Hello world"}),
+    [X] = decode(#msg{content="~m~11~m~Hello world"}),
     ?assertMatch("Hello world", X#msg.content).
 
 complex_msg_test() ->
-    X = decode(#msg{content="~m~11~m~Hello~world"}),
+    [X] = decode(#msg{content="~m~11~m~Hello~world"}),
     ?assertMatch("Hello~world", X#msg.content).
 
 simple_heartbeat_test() ->
-    X = decode(#msg{content="~m~4~m~~h~0"}),
+    [X] = decode(#msg{content="~m~4~m~~h~0"}),
     ?assertMatch(0, X#heartbeat.index).
 
 simple_json_test() ->
-    X = decode(#msg{content="~m~20~m~~j~{\"hello\":\"world\"}"}),
+    [X] = decode(#msg{content="~m~20~m~~j~{\"hello\":\"world\"}"}),
     ?assertMatch(#msg{content=[{<<"hello">>,<<"world">>}], json=true}, X).
 
 json_encoding_test() ->
     JSON = [{<<"hello">>,<<"world">>}],
     Msg = #msg{content = JSON, json=true},
     Data = encode(Msg),
-    X = decode(#msg{content=Data}),
+    [X] = decode(#msg{content=Data}),
     ?assertMatch(#msg{content=JSON, json=true}, X).
 
 -endif.
