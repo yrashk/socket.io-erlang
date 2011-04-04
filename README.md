@@ -3,7 +3,7 @@ Socket.IO for Erlang
 
 ## Socket.IO
 
-[Socket.IO](http://socket.io/) aims to make realtime apps possible in every browser and mobile device, blurring the differences between the different transport mechanisms.
+[Socket.IO](http://socket.io/) aims to make live apps possible in every browser and mobile device, blurring the differences between the different transport mechanisms.
 
 ## What is socket.io for Erlang?
 
