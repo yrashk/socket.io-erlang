@@ -136,12 +136,11 @@ handle_call(stop, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({initialize, Req}, #state{ heartbeat_interval = Interval } = State) ->
-    Req:stream(head, [{"Content-Type", "text/html"},
-                      {"Connection", "Keep-Alive"},
-                      {"Transfer-Encoding", "chunked"}]),
+    Req:chunk(head, [{"Content-Type", "text/html"},
+                      {"Connection", "Keep-Alive"}]),
     H = "<html><body>" ++ lists:duplicate(254,$\s),
     link(Req:get(socket)),
-    Req:stream({chunk, H}),
+    Req:chunk(H),
     {noreply, State#state{ connection_reference = {'htmlfile', connected} }, Interval};
 
 handle_cast(heartbeat, #state{ heartbeats = Beats,
@@ -220,4 +219,4 @@ send_message(#heartbeat{} = Message, Req) ->
 send_message(Message, Req) ->
     Message0 =  binary_to_list(jsx:term_to_json(list_to_binary(Message), [{strict, false}])),
     M = "<script>parent.s._(" ++ Message0 ++ ", document);</script>",
-    Req:stream({chunk, M}).
+    Req:chunk(M).
