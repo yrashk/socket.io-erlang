@@ -53,10 +53,11 @@ init([Port, Resource, DefaultHttpHandler, Sup]) ->
     Self = self(),
     process_flag(trap_exit, true),
     {ok, MisultinPid} = misultin:start_link([{port, Port},
-					     {loop, fun (Req) -> handle_http(Self, Req) end},
-					     {ws_loop, fun (Ws) -> handle_websocket(Self, Resource, Ws) end},
-					     {ws_autoexit, false}
-					    ]),
+                                             {name, false},
+                                             {loop, fun (Req) -> handle_http(Self, Req) end},
+                                             {ws_loop, fun (Ws) -> handle_websocket(Self, Resource, Ws) end},
+                                             {ws_autoexit, false}
+                                            ]),
     WebServerRef = erlang:monitor(process, MisultinPid),
     gen_server:cast(Self, acquire_event_manager),
     {ok, #state{
