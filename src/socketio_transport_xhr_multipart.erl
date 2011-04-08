@@ -109,7 +109,7 @@ handle_call({'xhr-multipart', data, Req}, _From, #state{ heartbeat_interval = In
             [F(Msg) || Msg <- socketio_data:decode(#msg{content=M})]
         end)
     end, Data),
-    Req:ok("ok"),
+    Req:ok([{"Content-Type","text/plain"}],"ok"),
     {reply, ok, State, Interval};
 
 %% Event management
