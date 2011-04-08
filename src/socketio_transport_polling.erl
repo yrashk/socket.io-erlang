@@ -190,8 +190,8 @@ handle_info(timeout, #state{ connection_reference = {_TransportType, connected},
     {noreply, State};
 
 %% Client has timed out
-handle_info(timeout, #state{ caller = Caller } = State) ->
-    gen_server:call(Caller, connection_gone),
+handle_info(timeout, #state{ caller = Caller, req = Req } = State) ->
+    gen_server:call(Caller, Req:ok("")),
     {stop, shutdown, State};
 
 handle_info(_Info, State) ->

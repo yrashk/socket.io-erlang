@@ -184,8 +184,8 @@ handle_cast(_, #state{} = State) ->
 handle_info({'EXIT',_Port,_Reason}, #state{ close_timeout = ServerTimeout} = State) when is_port(_Port) ->
     {noreply, State#state { connection_reference = {'xhr-multipart', none}}, ServerTimeout};
 
-handle_info(timeout, #state{ connection_reference = {'xhr-multipart', none}, caller = Caller } = State) ->
-    gen_server:call(Caller, connection_gone),
+handle_info(timeout, #state{ connection_reference = {'xhr-multipart', none, req = Req}, caller = Caller } = State) ->
+    gen_server:call(Caller, Req:ok("")),
     {stop, shutdown, State};
 
 handle_info(timeout, State) ->
