@@ -54,6 +54,7 @@ start_link(Sup, SessionId, ServerModule, ConnectionReference) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Sup, SessionId, ServerModule, {'htmlfile', {Req, Caller}}]) ->
+    apply(ServerModule, ensure_longpolling_request, [Req]),
     process_flag(trap_exit, true),
     HeartbeatInterval = 
     case application:get_env(heartbeat_interval) of

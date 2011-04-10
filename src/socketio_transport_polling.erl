@@ -153,6 +153,7 @@ handle_cast({TransportType, polling_request, {Req, Index}, Server}, State) ->
     handle_cast({TransportType, polling_request, Req, Server}, State#state{ index = Index});
 handle_cast({TransportType, polling_request, Req, Server}, #state { server_module = ServerModule,
                                                                     polling_duration = Interval, message_buffer = [] } = State) ->
+    apply(ServerModule, ensure_longpolling_request, [Req]),
     link(apply(ServerModule, socket, [Req])),
     {noreply, State#state{ connection_reference = {TransportType, connected}, req = Req, caller = Server }, Interval};
 

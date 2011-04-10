@@ -1,7 +1,7 @@
 -module(socketio_http_misultin).
 -behaviour(socketio_http_server).
 -export([start_link/1, file/2, respond/2, respond/3, respond/4, parse_post/1, headers/2, chunk/2, stream/2,
-         socket/1, get_headers/1, websocket_send/2]).
+         socket/1, get_headers/1, websocket_send/2, ensure_longpolling_request/1]).
 
 start_link(Opts) ->
     Port = proplists:get_value(port, Opts),
@@ -46,6 +46,9 @@ get_headers(Request) ->
 
 websocket_send(Ws, Data) ->
     Ws:send(Data).
+
+ensure_longpolling_request(Request) ->
+    Request:options([{comet, true}]).
 
 %% Internal functions
 
