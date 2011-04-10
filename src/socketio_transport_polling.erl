@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3]).
+-export([start_link/4]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -14,10 +14,11 @@
 -record(state, {
           session_id,
           message_buffer = [],
+          server_module,
           connection_reference,
-	  req,
-	  caller,
-	  index,
+          req,
+          caller,
+          index,
           polling_duration,
           close_timeout,
           event_manager,
@@ -35,8 +36,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Sup, SessionId, ConnectionReference) ->
-    gen_server:start_link(?MODULE, [Sup, SessionId, ConnectionReference], []).
+start_link(Sup, SessionId, ServerModule, ConnectionReference) ->
+    gen_server:start_link(?MODULE, [Sup, SessionId, ServerModule,ConnectionReference], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -53,7 +54,7 @@ start_link(Sup, SessionId, ConnectionReference) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Sup, SessionId, {TransportType, {Req, Index}}]) ->
+init([Sup, SessionId, ServerModule, {TransportType, {Req, Index}}]) ->
     process_flag(trap_exit, true),
     PollingDuration = 
     case application:get_env(polling_duration) of
@@ -70,9 +71,10 @@ init([Sup, SessionId, {TransportType, {Req, Index}}]) ->
 	    8000
     end,
     {ok, EventMgr} = gen_event:start_link(),
-    send_message(#msg{content = SessionId}, Req, Index, Sup),
+    send_message(#msg{content = SessionId}, Req, Index, ServerModule, Sup),
     {ok, #state {
        session_id = SessionId,
+       server_module = ServerModule,
        connection_reference = {TransportType, none},
        req = Req,
        index = Index,
@@ -82,8 +84,8 @@ init([Sup, SessionId, {TransportType, {Req, Index}}]) ->
        sup = Sup
       }};
 
-init([Sup, SessionId, {TransportType, Req}]) ->
-    init([Sup, SessionId, {TransportType, {Req, undefined}}]).
+init([Sup, SessionId, ServerModule, {TransportType, Req}]) ->
+    init([Sup, SessionId, ServerModule, {TransportType, {Req, undefined}}]).
 
 
 %%--------------------------------------------------------------------
@@ -101,15 +103,15 @@ init([Sup, SessionId, {TransportType, Req}]) ->
 %% @end
 %%--------------------------------------------------------------------
 %% Incoming data
-handle_call({_TransportType, data, Req}, From, #state{ event_manager = EventManager, sup = Sup } = State) ->
-    Data = Req:parse_post(),
+handle_call({_TransportType, data, Req}, From, #state{ server_module = ServerModule,
+                                                       event_manager = EventManager, sup = Sup } = State) ->
+    Data = apply(ServerModule, parse_post, [Req]),
     Self = self(),
     Response =
-	case cors_headers(Req:get(headers), Sup) of
+	case cors_headers(apply(ServerModule, get_headers, [Req]), Sup) of
 	    {false, _Headers} ->
-		gen_server:reply(From, Req:respond(405, "unauthorized"));
+            gen_server:reply(From, apply(ServerModule, respond, [Req, 405, "unauthorized"]));
 	    {_, Headers0} ->
-		Data = Req:parse_post(),
 		Self = self(),
     		lists:foreach(fun({"data", M}) ->
     				      spawn(fun () ->
@@ -119,7 +121,7 @@ handle_call({_TransportType, data, Req}, From, #state{ event_manager = EventMana
      							[F(Msg) || Msg <- socketio_data:decode(#msg{content=M})]
     					    end)
     			      end, Data),
-		gen_server:reply(From, Req:ok([Headers0|[{"Content-Type", "text/plain"}]], "ok"))
+		gen_server:reply(From, apply(ServerModule, respond,[Req, 200, [Headers0|[{"Content-Type", "text/plain"}]], "ok"]))
 	end,
     {reply, Response, State};
 
@@ -149,12 +151,14 @@ handle_call(stop, _From, State) ->
 %% Polling
 handle_cast({TransportType, polling_request, {Req, Index}, Server}, State) ->
     handle_cast({TransportType, polling_request, Req, Server}, State#state{ index = Index});
-handle_cast({TransportType, polling_request, Req, Server}, #state { polling_duration = Interval, message_buffer = [] } = State) ->
-    link(Req:get(socket)),
+handle_cast({TransportType, polling_request, Req, Server}, #state { server_module = ServerModule,
+                                                                    polling_duration = Interval, message_buffer = [] } = State) ->
+    link(apply(ServerModule, socket, [Req])),
     {noreply, State#state{ connection_reference = {TransportType, connected}, req = Req, caller = Server }, Interval};
 
-handle_cast({TransportType, polling_request, Req, Server}, #state { message_buffer = Buffer } = State) ->
-    link(Req:get(socket)),
+handle_cast({TransportType, polling_request, Req, Server}, #state { server_module = ServerModule, 
+                                                                    message_buffer = Buffer } = State) ->
+    link(apply(ServerModule, socket, [Req])),
     handle_cast({send, {buffer, Buffer}}, State#state{ connection_reference = {TransportType, connected},
 						       req = Req, caller = Server, message_buffer = []});
 
@@ -162,9 +166,10 @@ handle_cast({TransportType, polling_request, Req, Server}, #state { message_buff
 handle_cast({send, Message}, #state{ connection_reference = {_TransportType, none}, message_buffer = Buffer } = State) ->
     {noreply, State#state{ message_buffer = lists:append(Buffer, [Message])}};
 
-handle_cast({send, Message}, #state{ connection_reference = {TransportType, connected }, req = Req, caller = Caller,
-				     index = Index, sup = Sup, polling_duration = Interval} = State) ->
-    gen_server:reply(Caller, send_message(Message, Req, Index, Sup)),
+handle_cast({send, Message}, #state{ server_module = ServerModule,
+                                     connection_reference = {TransportType, connected }, req = Req, caller = Caller,
+                                     index = Index, sup = Sup, polling_duration = Interval} = State) ->
+    gen_server:reply(Caller, send_message(Message, Req, Index, ServerModule, Sup)),
     {noreply, State#state{ connection_reference = {TransportType, none}}, Interval};
 
 handle_cast(_, State) ->
@@ -185,13 +190,15 @@ handle_info({'EXIT',Port,_Reason}, #state{ connection_reference = {TransportType
     {noreply, State#state { connection_reference = {TransportType, none}}, CloseTimeout};
 
 %% Connection has timed out
-handle_info(timeout, #state{ connection_reference = {_TransportType, connected}, caller = Caller, req = Req, index = Index, sup = Sup } = State) ->
-    gen_server:reply(Caller, send_message("", Req, Index, Sup)),
+handle_info(timeout, #state{ server_module = ServerModule, 
+                             connection_reference = {_TransportType, connected},
+                             caller = Caller, req = Req, index = Index, sup = Sup } = State) ->
+    gen_server:reply(Caller, send_message("", Req, Index, ServerModule, Sup)),
     {noreply, State};
 
 %% Client has timed out
-handle_info(timeout, #state{ caller = Caller, req = Req } = State) ->
-    gen_server:call(Caller, Req:ok("")),
+handle_info(timeout, #state{ server_module = ServerModule, caller = Caller, req = Req } = State) ->
+    gen_server:reply(Caller, apply(ServerModule, respond, [Req, 200,""])),
     {stop, shutdown, State};
 
 handle_info(_Info, State) ->
@@ -225,10 +232,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-send_message(#msg{} = Message, Req, Index, Sup) ->
-    send_message(socketio_data:encode(Message), Req, Index, Sup);
+send_message(#msg{} = Message, Req, Index, ServerModule, Sup) ->
+    send_message(socketio_data:encode(Message), Req, Index, ServerModule, Sup);
 
-send_message({buffer, Messages}, Req, Index, Sup) ->
+send_message({buffer, Messages}, Req, Index, ServerModule, Sup) ->
     Messages0 = lists:map(fun(M) ->
 				  case M of
 				      #msg{} ->
@@ -237,33 +244,33 @@ send_message({buffer, Messages}, Req, Index, Sup) ->
 					  M
 				  end
 			  end, Messages),
-    send_message(Messages0, Req, Index, Sup);
+    send_message(Messages0, Req, Index, ServerModule, Sup);
 
-send_message(Message, Req, undefined, Sup) ->
+send_message(Message, Req, undefined, ServerModule, Sup) ->
     Headers = [{"Connection", "keep-alive"}],
     Headers0 =
-	case cors_headers(Req:get(headers), Sup) of
+	case cors_headers(apply(ServerModule, get_headers, [Req]), Sup) of
 	    {false, _} ->
 		Headers;
 	    {_, Headers1} ->
 		[Headers1|Headers]
 	end,
-    Req:ok(Headers0, Message);
+    apply(ServerModule, respond, [Req, 200, Headers0, Message]);
 
-send_message(Message, Req, Index, Sup) ->
+send_message(Message, Req, Index, ServerModule, Sup) ->
     Headers = [{"Connection", "keep-alive"}],
-    case cors_headers(Req:get(headers), Sup) of
+    case cors_headers(apply(ServerModule, get_headers, [Req]), Sup) of
 	{false, _} ->
-	    Req:ok("alert('Cross domain security restrictions not met');");
+	    apply(ServerModule, respond, [Req, 200, "alert('Cross domain security restrictions not met');"]);
 	{_, Headers0} ->
-	    send_message_1([Headers0|Headers], Message, Req, Index)
+	    send_message_1([Headers0|Headers], Message, Req, Index, ServerModule)
 	end.
 
-send_message_1(Headers, Message, Req, Index) ->
+send_message_1(Headers, Message, Req, Index, ServerModule) ->
     Headers0 = [{"Content-Type", "text/javascript; charset=UTF-8"}|Headers],
     Message0 = binary_to_list(jsx:term_to_json(list_to_binary(Message), [{strict, false}])),
     Message1 = "io.JSONP["++Index++"]._(" ++ Message0 ++ ");",
-    Req:ok(Headers0, Message1).
+    apply(ServerModule, respond, [Req, 200, Headers0, Message1]).
 
 cors_headers(Headers, Sup) ->
     case proplists:get_value('Origin', Headers) of

@@ -23,6 +23,7 @@ start_link(Options) ->
 %% ===================================================================
 
 init([Options]) ->
+    ServerModule = proplists:get_value(server, Options, socketio_http_misultin),
     HttpPort = proplists:get_value(http_port, Options, 80),
     DefaultHttpHandler = proplists:get_value(default_http_handler, Options),
     Resource = lists:reverse(string:tokens(proplists:get_value(resource, Options, "socket.io"),"/")),
@@ -34,8 +35,9 @@ init([Options]) ->
                                   {socketio_listener, {socketio_listener, start_link, [self(), Origins]},
                                    permanent, 5000, worker, [socketio_listener]},
 
-                                  {socketio_http, {socketio_http, start_link, [HttpPort,
-									       Resource,
+                                  {socketio_http, {socketio_http, start_link, [ServerModule,
+                                                                               HttpPort,
+                                                                               Resource,
                                                                                DefaultHttpHandler,
                                                                                self()]}, 
                                    permanent, 5000, worker, [socketio_http]},

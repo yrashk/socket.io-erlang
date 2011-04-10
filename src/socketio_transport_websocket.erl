@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3]).
+-export([start_link/4]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -32,7 +32,7 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Sup, SessionId, ConnectionReference) ->
+start_link(Sup, SessionId, _ServerModule, ConnectionReference) ->
     gen_server:start_link(?MODULE, [Sup, SessionId, ConnectionReference], []).
 
 %%%===================================================================

@@ -2,7 +2,7 @@
 -include_lib("socketio.hrl").
 
 %% API
--export([start_link/4, start/4]).
+-export([start_link/5, start/5]).
 -export([event_manager/1, send/2, session_id/1]).
 
 %%%===================================================================
@@ -16,13 +16,13 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Sup, Module, SessionId, ConnectionReference) ->
-    Module:start_link(Sup, SessionId, ConnectionReference).
+start_link(Sup, Module, SessionId, ServerModule, ConnectionReference) ->
+    Module:start_link(Sup, SessionId, ServerModule, ConnectionReference).
 
-start(Sup0, Module, SessionId, ConnectionReference) ->
+start(Sup0, Module, SessionId, ServerModule, ConnectionReference) ->
     Children = supervisor:which_children(Sup0),
     {Sup, _, _, _} = lists:keyfind(socketio_client_sup,1, Children),
-    supervisor:start_child(Sup, [Sup0, Module, SessionId, ConnectionReference]).
+    supervisor:start_child(Sup, [Sup0, Module, SessionId, ServerModule, ConnectionReference]).
 
 
 send(Server, Message) ->

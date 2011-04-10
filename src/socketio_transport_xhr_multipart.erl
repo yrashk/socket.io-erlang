@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3]).
+-export([start_link/4]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -14,7 +14,8 @@
 -record(state, {
           session_id,
           req,
-	  caller,
+          caller,
+          server_module,
           connection_reference,
           heartbeats = 0,
           heartbeat_interval,
@@ -34,8 +35,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Sup, SessionId, ConnectionReference) ->
-    gen_server:start_link(?MODULE, [Sup, SessionId, ConnectionReference], []).
+start_link(Sup, SessionId, ServerModule, ConnectionReference) ->
+    gen_server:start_link(?MODULE, [Sup, SessionId, ServerModule, ConnectionReference], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -52,7 +53,7 @@ start_link(Sup, SessionId, ConnectionReference) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Sup, SessionId, {'xhr-multipart', {Req, Caller}}]) ->
+init([Sup, SessionId, ServerModule, {'xhr-multipart', {Req, Caller}}]) ->
     process_flag(trap_exit, true),
     HeartbeatInterval = 
     case application:get_env(heartbeat_interval) of
@@ -74,6 +75,7 @@ init([Sup, SessionId, {'xhr-multipart', {Req, Caller}}]) ->
     gen_server:cast(self(), heartbeat),
     {ok, #state{
        session_id = SessionId,
+       server_module = ServerModule,
        connection_reference = {'xhr-multipart', none},
        req = Req,
        caller = Caller,
@@ -98,8 +100,9 @@ init([Sup, SessionId, {'xhr-multipart', {Req, Caller}}]) ->
 %% @end
 %%--------------------------------------------------------------------
 %% Incoming data
-handle_call({'xhr-multipart', data, Req}, _From, #state{ heartbeat_interval = Interval, event_manager = EventManager } = State) ->
-    Data = Req:parse_post(),
+handle_call({'xhr-multipart', data, Req}, _From, #state{ server_module = ServerModule,
+                                                         heartbeat_interval = Interval, event_manager = EventManager } = State) ->
+    Data = apply(ServerModule, parse_post, [Req]),
     Self = self(),
     lists:foreach(fun({"data", M}) ->
         spawn(fun () ->
@@ -109,7 +112,7 @@ handle_call({'xhr-multipart', data, Req}, _From, #state{ heartbeat_interval = In
             [F(Msg) || Msg <- socketio_data:decode(#msg{content=M})]
         end)
     end, Data),
-    Req:ok([{"Content-Type","text/plain"}],"ok"),
+    apply(ServerModule, respond, [Req, 200,[{"Content-Type","text/plain"}],"ok"]),
     {reply, ok, State, Interval};
 
 %% Event management
@@ -135,8 +138,8 @@ handle_call(stop, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({initialize, Req}, #state{ heartbeat_interval = Interval } = State) ->
-    Headers = Req:get(headers),
+handle_cast({initialize, Req}, #state{ server_module = ServerModule, heartbeat_interval = Interval } = State) ->
+    Headers = apply(ServerModule, get_headers, [Req]),
     Headers1 = 
     case proplists:get_value('Origin', Headers) of
         undefined ->
@@ -150,10 +153,10 @@ handle_cast({initialize, Req}, #state{ heartbeat_interval = Interval } = State) 
                     Headers
             end
     end,
-    link(Req:get(socket)),
-    Req:stream(head, [{"Content-Type", "multipart/x-mixed-replace;boundary=\"socketio\""},
-                      {"Connection", "Keep-Alive"}|Headers1]),
-    Req:stream("--socketio\n"),
+    link(apply(ServerModule, socket, [Req])),
+    apply(ServerModule, headers, [Req,  [{"Content-Type", "multipart/x-mixed-replace;boundary=\"socketio\""},
+                                             {"Connection", "Keep-Alive"}|Headers1]]),
+    apply(ServerModule, stream, [Req, "--socketio\n"]),
     {noreply, State#state{ connection_reference = {'xhr-multipart', connected} }, Interval};
 
 handle_cast(heartbeat, #state{ heartbeats = Beats,
@@ -163,8 +166,10 @@ handle_cast(heartbeat, #state{ heartbeats = Beats,
     {noreply, State#state { heartbeats = Beats1 }, Interval};
 
 %% Send
-handle_cast({send, Message}, #state{ req = Req, connection_reference = {'xhr-multipart', connected }, heartbeat_interval = Interval } = State) ->
-    send_message(Message, Req),
+handle_cast({send, Message}, #state{ req = Req, 
+                                     server_module = ServerModule,
+                                     connection_reference = {'xhr-multipart', connected }, heartbeat_interval = Interval } = State) ->
+    send_message(Message, Req, ServerModule),
     {noreply, State, Interval};
 
 handle_cast(_, #state{} = State) ->
@@ -184,8 +189,9 @@ handle_cast(_, #state{} = State) ->
 handle_info({'EXIT',_Port,_Reason}, #state{ close_timeout = ServerTimeout} = State) when is_port(_Port) ->
     {noreply, State#state { connection_reference = {'xhr-multipart', none}}, ServerTimeout};
 
-handle_info(timeout, #state{ connection_reference = {'xhr-multipart', none, req = Req}, caller = Caller } = State) ->
-    gen_server:call(Caller, Req:ok("")),
+handle_info(timeout, #state{ server_module = ServerModule,
+                             connection_reference = {'xhr-multipart', none, req = Req}, caller = Caller } = State) ->
+    gen_server:call(Caller, apply(ServerModule, respond, [Req, 200, ""])),
     {stop, shutdown, State};
 
 handle_info(timeout, State) ->
@@ -223,16 +229,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-send_message(#msg{} = Message, Req) ->
-    send_message(socketio_data:encode(Message), Req);
+send_message(#msg{} = Message, Req, ServerModule) ->
+    send_message(socketio_data:encode(Message), Req, ServerModule);
 
-send_message(#heartbeat{} = Message, Req) ->
-    send_message(socketio_data:encode(Message), Req);
+send_message(#heartbeat{} = Message, Req, ServerModule) ->
+    send_message(socketio_data:encode(Message), Req, ServerModule);
 
-send_message([6] = Message, Req) ->
-    Req:stream("Content-Type: text/plain; charset=us-ascii\n\n" ++ Message ++ "\n--socketio\n");
-send_message(Message, Req) ->
-    Req:stream("Content-Type: text/plain\n\n" ++ Message ++ "\n--socketio\n").
+send_message([6] = Message, Req, ServerModule) ->
+    apply(ServerModule, stream, [Req,"Content-Type: text/plain; charset=us-ascii\n\n" ++ Message ++ "\n--socketio\n"]);
+send_message(Message, Req, ServerModule) ->
+    apply(ServerModule, stream, [Req,"Content-Type: text/plain\n\n" ++ Message ++ "\n--socketio\n"]).
 
 listener(#state{ sup = Sup }) ->
     socketio_listener:server(Sup).
