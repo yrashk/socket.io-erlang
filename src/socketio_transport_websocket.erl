@@ -14,6 +14,7 @@
 -record(state, {
           session_id,
           message_handler,
+          server_module,
           connection_reference,
           heartbeats = 0,
           heartbeat_interval,
@@ -32,8 +33,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Sup, SessionId, _ServerModule, ConnectionReference) ->
-    gen_server:start_link(?MODULE, [Sup, SessionId, ConnectionReference], []).
+start_link(Sup, SessionId, ServerModule, ConnectionReference) ->
+    gen_server:start_link(?MODULE, [Sup, SessionId, ServerModule, ConnectionReference], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -50,7 +51,7 @@ start_link(Sup, SessionId, _ServerModule, ConnectionReference) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Sup, SessionId, ConnectionReference]) ->
+init([Sup, SessionId, ServerModule, ConnectionReference]) ->
     HeartbeatInterval = 
     case application:get_env(heartbeat_interval) of
         {ok, Time} ->
@@ -63,6 +64,7 @@ init([Sup, SessionId, ConnectionReference]) ->
     gen_server:cast(self(), heartbeat),
     {ok, #state{
        session_id = SessionId,
+       server_module = ServerModule,
        connection_reference = ConnectionReference,
        heartbeat_interval = HeartbeatInterval,
        event_manager = EventMgr,
@@ -123,14 +125,17 @@ handle_call(stop, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 %% Send
-handle_cast({send, Message}, #state{ connection_reference = ConnectionReference, heartbeat_interval = Interval } = State) ->
-    handle_send(ConnectionReference, Message),
+handle_cast({send, Message}, #state{ server_module = ServerModule,
+                                     connection_reference = ConnectionReference, heartbeat_interval = Interval } = State) ->
+    handle_send(ConnectionReference, Message, ServerModule),
     {noreply, State, Interval};
 
-handle_cast(heartbeat, #state{ connection_reference = ConnectionReference, heartbeats = Beats,
-                              heartbeat_interval = Interval } = State) ->
+handle_cast(heartbeat, #state{ 
+              server_module = ServerModule,
+              connection_reference = ConnectionReference, heartbeats = Beats,
+              heartbeat_interval = Interval } = State) ->
     Beats1 = Beats + 1,
-    handle_send(ConnectionReference, #heartbeat{ index = Beats1 }),
+    handle_send(ConnectionReference, #heartbeat{ index = Beats1 }, ServerModule),
     {noreply, State#state { heartbeats = Beats1 }, Interval}.
 
 %%--------------------------------------------------------------------
@@ -178,5 +183,5 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-handle_send({websocket, Ws}, Message) ->
-    Ws:send(socketio_data:encode(Message)).
+handle_send({websocket, Ws}, Message, ServerModule) ->
+    apply(ServerModule, websocket_send, [Ws, socketio_data:encode(Message)]).
