@@ -192,7 +192,7 @@ handle_info({'EXIT',_Port,_Reason}, #state{ close_timeout = ServerTimeout} = Sta
 
 handle_info(timeout, #state{ server_module = ServerModule,
                              connection_reference = {'xhr-multipart', none, req = Req}, caller = Caller } = State) ->
-    gen_server:call(Caller, apply(ServerModule, respond, [Req, 200, ""])),
+    gen_server:reply(Caller, apply(ServerModule, respond, [Req, 200, ""])),
     {stop, shutdown, State};
 
 handle_info(timeout, State) ->
