@@ -15,49 +15,49 @@ start_link(Opts) ->
                         ]).
 
 file(Request, Filename) ->
-    Request:file(Filename).
+    misultin_req:file(Filename, Request).
 
 respond(Request, Code) ->
-    Request:respond(Code).
+    misultin_req:respond(Code, Request).
 
 respond(Request, Code, Content) ->
-    Request:respond(Code, Content).
+    misultin_req:respond(Code, Content, Request).
 
 respond(Request, Code, Headers, Content) ->
-    Request:respond(Code, Headers, Content).
+    misultin_req:respond(Code, Headers, Content, Request).
 
 parse_post(Request) ->
-    Request:parse_post().
+    misultin_req:parse_post(Request).
 
 headers(Request, Headers) ->
-    Request:stream(head, 200, Headers).
+    misultin_req:stream(head, 200, Headers, Request).
 
 chunk(Request, Chunk) ->
-    Request:chunk(Chunk).
+    misultin_req:chunk(Chunk, Request).
 
 stream(Request, Data) ->
-    Request:stream(Data).
+    misultin_req:stream(Data, Request).
 
 socket(Request) ->
-    Request:get(socket).
+    misultin_req:get(socket, Request).
 
 get_headers(Request) ->
-    Request:get(headers).
+    misultin_req:get(headers, Request).
 
 websocket_send(Ws, Data) ->
-    Ws:send(Data).
+    misultin_ws:send(Data, Ws).
 
 ensure_longpolling_request(Request) ->
-    Request:options([{comet, true}]).
+    misultin_req:options([{comet, true}], Request).
 
 %% Internal functions
 
 handle_http(Server, Req) ->
-    Path = Req:resource([urldecode]),
-    gen_server:call(Server, {request, Req:get(method), lists:reverse(Path), Req}, infinity).
+    Path = misultin_req:resource([urldecode], Req),
+    gen_server:call(Server, {request, misultin_req:get(method, Req), lists:reverse(Path), Req}, infinity).
 
 handle_websocket(Server, Resource, Ws) ->
-    WsPath = Ws:get(path),
+    WsPath = misultin_ws:get(path, Ws),
     WsResource = string:tokens(WsPath,"/"),
     handle_websocket_1(Server, Resource, lists:reverse(WsResource), Ws).
 
