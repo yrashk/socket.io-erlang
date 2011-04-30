@@ -1,5 +1,5 @@
 ebin/socketio.app
 ebin/*.beam
+demo/*.beam
 deps
 .eunit
-.agner.config
