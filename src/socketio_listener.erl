@@ -1,7 +1,7 @@
 -module(socketio_listener).
 -behaviour(gen_server).
 
--include_lib("ex_uri.hrl").
+-include_lib("ex_uri/include/ex_uri.hrl").
 
 %% API
 -export([start/1, server/1]).
