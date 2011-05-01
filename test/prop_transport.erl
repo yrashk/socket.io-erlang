@@ -91,7 +91,7 @@ heartbeat() -> ?LET(N, int(), abs(N)).
 json() ->
     ?LET(Compiled,
          ?LET(X, [json_data(),end_json], lists:flatten(X)),
-         jsx:json_to_term(jsx:format(jsx:eventify(Compiled)))).
+         jsx:json_to_term(jsx:format(eventify(Compiled)))).
 
 json_data() ->
     ?LAZY(weighted_union([
@@ -116,3 +116,15 @@ val() ->
 
 ascii() ->
     list(choose($a,$z)).
+
+
+eventify([]) ->
+    fun() -> 
+	    {incomplete, fun(List) when is_list(List) -> 
+				 eventify(List);
+			    (_) ->
+				 erlang:error(badarg) 
+			 end}
+    end;    
+eventify([Next|Rest]) ->
+    fun() -> {event, Next, eventify(Rest)} end. 
