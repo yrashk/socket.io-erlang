@@ -105,9 +105,12 @@ handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
     {reply, EventMgr, State};
 
 %% Sessions
-
 handle_call(session_id, _From, #state{ session_id = SessionId } = State) ->
     {reply, SessionId, State};
+
+%% Initial request
+handle_call(req, _From, #state{ connection_reference = {websocket, Ws}} = State) ->
+    {reply, Ws, State};
 
 %% Flow control
 handle_call(stop, _From, State) ->

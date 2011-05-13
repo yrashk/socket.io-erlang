@@ -124,6 +124,10 @@ handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
 handle_call(session_id, _From, #state{ session_id = SessionId } = State) ->
     {reply, SessionId, State};
 
+%% Initial request
+handle_call(req, _From, #state{ req = Req} = State) ->
+    {reply, Req, State};
+
 %% Flow control
 handle_call(stop, _From, State) ->
     {stop, shutdown, State}.
