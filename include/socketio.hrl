@@ -1,11 +1,11 @@
 -record(msg,
 	{
-	  content = [],
-	  json = false,
-	  length = 0
+    	  content = []     :: string() | jsx:eep0018(),
+ 	  json    = false  :: boolean(),
+	  length  = 0      :: non_neg_integer()
 	}).
 
 -record(heartbeat,
 	{
-	  index
+	  index :: non_neg_integer()
 	 }).
