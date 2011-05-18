@@ -21,7 +21,7 @@ start_link(Sup, Module, SessionId, ServerModule, ConnectionReference) ->
 
 start(Sup0, Module, SessionId, ServerModule, ConnectionReference) ->
     Children = supervisor:which_children(Sup0),
-    {Sup, _, _, _} = lists:keyfind(socketio_client_sup,1, Children),
+    {socketio_client_sup, Sup, _, _} = lists:keyfind(socketio_client_sup,1, Children),
     supervisor:start_child(Sup, [Sup0, Module, SessionId, ServerModule, ConnectionReference]).
 
 
