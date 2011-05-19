@@ -33,3 +33,6 @@ event_manager(Server) ->
 
 session_id(Server) ->
     gen_server:call(Server, session_id).
+
+stop(Server) ->
+    gen_server:call(Server, stop).
