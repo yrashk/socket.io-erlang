@@ -3,7 +3,7 @@
 
 %% API
 -export([start_link/5, start/5]).
--export([event_manager/1, send/2, session_id/1]).
+-export([event_manager/1, send/2, session_id/1, stop/1, request/1]).
 
 %%%===================================================================
 %%% API
@@ -36,3 +36,6 @@ session_id(Server) ->
 
 stop(Server) ->
     gen_server:call(Server, stop).
+
+request(Server) ->
+    gen_server:call(Server, req).
