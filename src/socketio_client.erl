@@ -3,7 +3,7 @@
 
 %% API
 -export([start_link/5, start/5]).
--export([event_manager/1, send/2, session_id/1, request/1]).
+-export([event_manager/1, send/2, session_id/1, stop/1, request/1]).
 
 %%%===================================================================
 %%% API
@@ -21,7 +21,7 @@ start_link(Sup, Module, SessionId, ServerModule, ConnectionReference) ->
 
 start(Sup0, Module, SessionId, ServerModule, ConnectionReference) ->
     Children = supervisor:which_children(Sup0),
-    {Sup, _, _, _} = lists:keyfind(socketio_client_sup,1, Children),
+    {socketio_client_sup, Sup, _, _} = lists:keyfind(socketio_client_sup,1, Children),
     supervisor:start_child(Sup, [Sup0, Module, SessionId, ServerModule, ConnectionReference]).
 
 
@@ -33,6 +33,9 @@ event_manager(Server) ->
 
 session_id(Server) ->
     gen_server:call(Server, session_id).
+
+stop(Server) ->
+    gen_server:call(Server, stop).
 
 request(Server) ->
     gen_server:call(Server, req).

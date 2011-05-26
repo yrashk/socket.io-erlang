@@ -16,7 +16,7 @@
 %% ===================================================================
 
 start_link(Options) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [Options]).
+    supervisor:start_link(?MODULE, [Options]).
 
 %% ===================================================================
 %% Supervisor callbacks
