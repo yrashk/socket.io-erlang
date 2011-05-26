@@ -9,6 +9,7 @@ start_link(Opts) ->
     Resource = proplists:get_value(resource, Opts),
     misultin:start_link([{port, Port},
                          {name, false},
+                         {autoexit, false},
                          {loop, fun (Req) -> handle_http(HttpProcess, Req) end},
                          {ws_loop, fun (Ws) -> handle_websocket(HttpProcess, Resource, Ws) end},
                          {ws_autoexit, false}
@@ -54,7 +55,17 @@ ensure_longpolling_request(Request) ->
 
 handle_http(Server, Req) ->
     Path = misultin_req:resource([urldecode], Req),
-    gen_server:call(Server, {request, misultin_req:get(method, Req), lists:reverse(Path), Req}, infinity).
+    This = self(),
+    {Ref, _Pid} = spawn_monitor(fun() ->
+        gen_server:call(Server, {request, misultin_req:get(method, Req), lists:reverse(Path), Req}, infinity),
+        This ! request_done
+    end),
+    receive
+        request_done -> ok;
+        {'DOWN', Ref, _Type, _Object, _Info} -> ok;
+        closed ->
+            gen_server:cast(Server, {closed, lists:reverse(Path)})
+    end.
 
 handle_websocket(Server, Resource, Ws) ->
     WsPath = misultin_ws:get(path, Ws),
