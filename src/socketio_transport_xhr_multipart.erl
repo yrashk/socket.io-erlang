@@ -57,19 +57,19 @@ init([Sup, SessionId, ServerModule, {'xhr-multipart', {Req, Caller}}]) ->
     apply(ServerModule, ensure_longpolling_request, [Req]),
     process_flag(trap_exit, true),
     HeartbeatInterval = 
-    case application:get_env(heartbeat_interval) of
-        {ok, Time} ->
-            Time;
-        _ ->
-            infinity
-    end,
+	case application:get_env(heartbeat_interval) of
+	    {ok, Time} ->
+		Time;
+	    _ ->
+		infinity
+	end,
     CloseTimeout = 
-    case application:get_env(close_timeout) of
-	{ok, Time0} ->
-	    Time0;
-	_ ->
-	    8000
-    end,
+	case application:get_env(close_timeout) of
+	    {ok, Time0} ->
+		Time0;
+	    _ ->
+		8000
+	end,
     {ok, EventMgr} = gen_event:start_link(),
     gen_server:cast(self(), {initialize, Req}),
     socketio_client:send(self(), #msg{ content = SessionId }),
@@ -195,7 +195,7 @@ handle_info({'EXIT',_Port,_Reason}, #state{ close_timeout = ServerTimeout} = Sta
     {noreply, State#state { connection_reference = {'xhr-multipart', none}}, ServerTimeout};
 
 handle_info(timeout, #state{ server_module = ServerModule,
-                             connection_reference = {'xhr-multipart', none, req = Req}, caller = Caller } = State) ->
+                             connection_reference = {'xhr-multipart', none}, req = Req, caller = Caller } = State) ->
     gen_server:reply(Caller, apply(ServerModule, respond, [Req, 200, ""])),
     {stop, shutdown, State};
 
