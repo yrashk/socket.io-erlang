@@ -18,7 +18,8 @@
           sup,
           web_server_monitor,
           server_module,
-          resource
+          resource,
+          last_generated_pid
          }).
 
 %%%===================================================================
@@ -64,7 +65,8 @@ init([ServerModule, Port, Resource, DefaultHttpHandler, Sup]) ->
        sup = Sup,
        web_server_monitor = WebServerRef,
        server_module = ServerModule,
-       resource = Resource
+       resource = Resource,
+       last_generated_pid = undefined
       }}.
 
 %%--------------------------------------------------------------------
@@ -153,8 +155,9 @@ handle_call({request, 'POST', [_Index, _Random, SessionId, "jsonp-polling"|Resou
 
 %% New XHR Multipart request
 handle_call({request, 'GET', ["xhr-multipart"|Resource], Req }, From, #state{ resource = Resource} = State) ->
-    handle_call({session, generate, {'xhr-multipart', {Req, From}}, socketio_transport_xhr_multipart}, From, State),
-    {noreply, State};
+    {reply, _Reply, NewState} = handle_call({session, generate, {'xhr-multipart', {Req, From}}, socketio_transport_xhr_multipart}, From, State),
+    {noreply, NewState};
+    
 
 %% Incoming XHR Multipart data
 handle_call({request, 'POST', ["send", SessionId, "xhr-multipart"|Resource], Req }, _From, 
@@ -173,8 +176,8 @@ handle_call({request, 'POST', ["send", SessionId, "xhr-multipart"|Resource], Req
 
 %% New htmlfile request
 handle_call({request, 'GET', [_Random, "htmlfile"|Resource], Req }, From, #state{ resource = Resource} = State) ->
-    handle_call({session, generate, {'htmlfile', {Req, From}}, socketio_transport_htmlfile}, From, State),
-    {noreply, State};
+    {reply, _Reply, NewState} = handle_call({session, generate, {'htmlfile', {Req, From}}, socketio_transport_htmlfile}, From, State),
+    {noreply, NewState};
 
 %% Incoming htmlfile data
 handle_call({request, 'POST', ["send", SessionId, "htmlfile"|Resource], Req }, _From, 
@@ -183,7 +186,7 @@ handle_call({request, 'POST', ["send", SessionId, "htmlfile"|Resource], Req }, _
                     sessions = Sessions } = State) ->
     Response =  
         case ets:lookup(Sessions, SessionId) of
-            [{SessionId, Pid}] -> 
+            [{SessionId, Pid}] ->
                 gen_server:call(Pid, {'htmlfile', data, Req});
             _ ->
                 apply(ServerModule, respond, [Req, 404, ""])
@@ -213,7 +216,7 @@ handle_call({session, generate, ConnectionReference, Transport}, _From, #state{
     link(Pid),
     ets:insert(Sessions, [{UUID, Pid}, {Pid, UUID}]),
     gen_event:notify(EventManager, {client, Pid}),
-    {reply, {UUID, Pid}, State};
+    {reply, {UUID, Pid}, State#state{last_generated_pid = Pid}};
 
 %% Event management
 handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
@@ -233,6 +236,14 @@ handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
 handle_cast(acquire_event_manager, State) ->
     EventManager = socketio_listener:event_manager(listener(State)),
     {noreply, State#state{ event_manager = EventManager }};
+
+handle_cast({closed, Data}, #state{ sessions = Sessions, last_generated_pid = LastPid } = State) ->
+    case has_transport_process(Data, Sessions, LastPid) of
+        [{Pid, _SessionID}] when Pid /= undefined ->
+            catch(gen_server:call(Pid, stop));
+        _Any -> ok
+    end,
+    {noreply, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -295,3 +306,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 listener(#state{ sup = Sup }) ->
     socketio_listener:server(Sup).
+
+has_transport_process([_Random, SessionId, "xhr-polling"|_Resource], Sessions, _LastGeneratedPid) -> ets:lookup(Sessions, SessionId);
+has_transport_process([_Random, "xhr-polling"|_Resource], _Sessions, LastGeneratedPid) -> [{LastGeneratedPid, ok}];
+
+has_transport_process([_Index, _Random, SessionId, "jsonp-polling"|_Resource], Sessions, _LastGeneratedPid) -> ets:lookup(Sessions, SessionId);
+has_transport_process([_Random, "xhr-polling"|_Resource], _Sessions, LastGeneratedPid) -> [{LastGeneratedPid, ok}];
+
+has_transport_process(["send", SessionId, "xhr-multipart"|_Resource], Sessions, _LastGeneratedPid) -> ets:lookup(Sessions, SessionId);
+has_transport_process(["xhr-multipart"|_Resource], _Sessions, LastGeneratedPid) -> [{LastGeneratedPid, ok}];
+
+has_transport_process(["send", SessionId, "htmlfile"|_Resource], Sessions, _LastGeneratedPid) -> ets:lookup(Sessions, SessionId);
+has_transport_process([_Random, "htmlfile"|_Resource], _Sessions, LastGeneratedPid) -> [{LastGeneratedPid, ok}];
+
+has_transport_process(_, _Sessions, _LastGeneratedPid) -> [].
