@@ -35,11 +35,21 @@ transport_tests(Transport) ->
     transport_tests(chrome, Transport).
 
 transport_tests(chrome, Transport) ->
-    transport_tests("Google Chrome", Transport);
+    case os:type() of
+       {unix,linux} ->
+          transport_tests("google-chrome", Transport);
+       _ ->
+          transport_tests("open -a \"Google Chrome\"", Transport)
+    end;
 transport_tests(firefox, Transport) ->
-    transport_tests("Firefox", Transport);
+    case os:type() of
+       {unix,linux} ->
+          transport_tests("firefox", Transport);
+       _ ->
+          transport_tests("open -a \"Firefox\"", Transport)
+    end;
 
-transport_tests(Browser, Transport) ->
+transport_tests(BrowserCommand, Transport) ->
         {inorder,
          {foreach,
           fun () ->
@@ -47,12 +57,12 @@ transport_tests(Browser, Transport) ->
                   ets:insert(socketio_tests, {transport, Transport}),
                   error_logger:delete_report_handler(error_logger_tty_h), %% suppress annoying kernel logger
                   application:start(misultin),
-		  application:start(socketio),
+		                application:start(socketio),
                   {ok, Pid} = socketio_listener:start([{http_port, 8989}, 
                                                        {default_http_handler, ?MODULE}]),
                   EventMgr = socketio_listener:event_manager(Pid),
                   ok = gen_event:add_handler(EventMgr, ?MODULE,[self()]),
-                  ?cmd("open -a \"" ++ Browser ++ "\" -g http://localhost:8989/"), %% FIXME: will only work on OSX
+                  ?cmd(BrowserCommand ++ " -g http://localhost:8989/"), %% FIXME: will only work on OSX/Linux
                   receive
                       {connected, Client, EM} -> 
                           {Client, EM}
