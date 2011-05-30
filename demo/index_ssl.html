@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head>
+    <meta HTTP-equiv="X-UA-Compatible" content="IE=EDGE">
+
+    <script src="/socket.io/socket.io.js">
+    </script>
+
+    <script type="text/javascript">
+      function init() {
+      socket = new io.Socket(location.hostname, {secure: true});
+      socket.on('message', function(data){
+         console.log(data);
+      });
+      socket.on('connect', function(){
+         console.log("Imma connectad!");
+         console.log(socket);
+         socket.send({msg: "Erlang rulez!"});
+
+      });
+      socket.connect();
+      }
+    </script>
+  </head>
+
+  <body onLoad="init()">
+
+  </body>
+</html>

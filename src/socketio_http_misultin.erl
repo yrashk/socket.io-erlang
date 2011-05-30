@@ -7,13 +7,9 @@ start_link(Opts) ->
     Port = proplists:get_value(port, Opts),
     HttpProcess = proplists:get_value(http_process, Opts),
     Resource = proplists:get_value(resource, Opts),
-    misultin:start_link([{port, Port},
-                         {name, false},
-                         {autoexit, false},
-                         {loop, fun (Req) -> handle_http(HttpProcess, Req) end},
-                         {ws_loop, fun (Ws) -> handle_websocket(HttpProcess, Resource, Ws) end},
-                         {ws_autoexit, false}
-                        ]).
+    SSL = proplists:get_value(ssl, Opts),
+    create_options(Port, HttpProcess, Resource, SSL),
+    misultin:start_link(create_options(Port, HttpProcess, Resource, SSL)).
 
 file(Request, Filename) ->
     misultin_req:file(Filename, Request).
@@ -52,6 +48,25 @@ ensure_longpolling_request(Request) ->
     misultin_req:options([{comet, true}], Request).
 
 %% Internal functions
+create_options(Port, HttpProcess, Resource, undefined) ->
+    [{port, Port},
+     {name, false},
+     {loop, fun (Req) -> handle_http(HttpProcess, Req) end},
+     {ws_loop, fun (Ws) -> handle_websocket(HttpProcess, Resource, Ws) end},
+     {ws_autoexit, false}];
+create_options(Port, HttpProcess, Resource, SSL) ->
+    Certfile = proplists:get_value(certfile, SSL),
+    Keyfile = proplists:get_value(keyfile, SSL),
+    Password = proplists:get_value(password, SSL),
+    [{port, Port},
+     {name, false},
+     {loop, fun (Req) -> handle_http(HttpProcess, Req) end},
+     {ws_loop, fun (Ws) -> handle_websocket(HttpProcess, Resource, Ws) end},
+     {ws_autoexit, false},
+     {ssl, [{certfile, Certfile},
+	    {keyfile, Keyfile},
+	    {password, Password}
+	   ]}].
 
 handle_http(Server, Req) ->
     Path = misultin_req:resource([urldecode], Req),

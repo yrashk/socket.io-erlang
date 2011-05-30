@@ -27,6 +27,7 @@ init([Options]) ->
     HttpPort = proplists:get_value(http_port, Options, 80),
     DefaultHttpHandler = proplists:get_value(default_http_handler, Options),
     Resource = lists:reverse(string:tokens(proplists:get_value(resource, Options, "socket.io"),"/")),
+    SSL = proplists:get_value(ssl, Options),
     Origins = proplists:get_value(origins,Options,[{"*", "*"}]),
     {ok, { {one_for_one, 5, 10}, [
                                   {socketio_listener_event_manager, {gen_event, start_link, []},
@@ -38,6 +39,7 @@ init([Options]) ->
                                   {socketio_http, {socketio_http, start_link, [ServerModule,
                                                                                HttpPort,
                                                                                Resource,
+									       SSL,
                                                                                DefaultHttpHandler,
                                                                                self()]}, 
                                    permanent, 5000, worker, [socketio_http]},

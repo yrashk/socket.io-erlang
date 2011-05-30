@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/5]).
+-export([start_link/6]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -33,10 +33,10 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(ServerModule, Port, Resource, {DefaultHttpHandler, Args}, Sup) ->
-    gen_server:start_link(?MODULE, [ServerModule, Port, Resource, {DefaultHttpHandler, Args}, Sup], []);
-start_link(ServerModule, Port, Resource, DefaultHttpHandler, Sup) ->
-    gen_server:start_link(?MODULE, [ServerModule, Port, Resource, DefaultHttpHandler, Sup], []).
+start_link(ServerModule, Port, Resource, SSL, {DefaultHttpHandler, Args}, Sup) ->
+    gen_server:start_link(?MODULE, [ServerModule, Port, Resource, SSL, {DefaultHttpHandler, Args}, Sup], []);
+start_link(ServerModule, Port, Resource, SSL, DefaultHttpHandler, Sup) ->
+    gen_server:start_link(?MODULE, [ServerModule, Port, Resource, SSL, DefaultHttpHandler, Sup], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -53,10 +53,10 @@ start_link(ServerModule, Port, Resource, DefaultHttpHandler, Sup) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([ServerModule, Port, Resource, DefaultHttpHandler, Sup]) ->
+init([ServerModule, Port, Resource, SSL, DefaultHttpHandler, Sup]) ->
     Self = self(),
     process_flag(trap_exit, true),
-    {ok, ServerPid} = apply(ServerModule, start_link, [[{port, Port}, {http_process, Self}, {resource, Resource}]]),
+    {ok, ServerPid} = apply(ServerModule, start_link, [[{port, Port}, {http_process, Self}, {resource, Resource}, {ssl, SSL}]]),
     WebServerRef = erlang:monitor(process, ServerPid),
     gen_server:cast(Self, acquire_event_manager),
     {ok, #state{
