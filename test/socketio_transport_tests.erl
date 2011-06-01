@@ -32,14 +32,14 @@ t_session_id({Client, EventMgr}) ->
     end.
 
 transport_tests(Transport) ->
-    transport_tests(chrome, Transport).
+    transport_tests(firefox, Transport).
 
 transport_tests(chrome, Transport) ->
     case os:type() of
        {unix,linux} ->
           transport_tests("google-chrome", Transport);
        _ ->
-          transport_tests("open -a \"Google Chrome\"", Transport)
+          transport_tests("open -a \"Google Chrome\" -g", Transport)
     end;
 transport_tests(firefox, Transport) ->
     case os:type() of
@@ -62,10 +62,16 @@ transport_tests(BrowserCommand, Transport) ->
                                                        {default_http_handler, ?MODULE}]),
                   EventMgr = socketio_listener:event_manager(Pid),
                   ok = gen_event:add_handler(EventMgr, ?MODULE,[self()]),
-                  ?cmd(BrowserCommand ++ " -g http://localhost:8989/"), %% FIXME: will only work on OSX/Linux
+io:format("~nRunning: ~1024p~n", [BrowserCommand ++ " http://localhost:8989/"]),
+                  ?cmd(BrowserCommand ++ " http://localhost:8989/"), %% FIXME: will only work on OSX/Linux
                   receive
                       {connected, Client, EM} -> 
-                          {Client, EM}
+                          {Client, EM};
+                      Other ->
+                          throw({unexpected_cmd_result, Other})
+                  after
+                      10000 ->
+                          throw(browser_connect_timeout)
                   end
           end,
           fun ({Client, _}) ->
