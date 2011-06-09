@@ -57,7 +57,11 @@ init([Sup, SessionId, ServerModule, ConnectionReference]) ->
         {ok, Time} ->
             Time;
         _ ->
-            infinity
+            error_logger:warning_report(
+                "Could not load default heartbeat_interval value from "
+                "the application file. Setting the default value to 10000 ms."
+            ),
+            10000
     end,
     {ok, EventMgr} = gen_event:start_link(),
     socketio_client:send(self(), #msg{ content = SessionId }),

@@ -61,6 +61,10 @@ init([Sup, SessionId, ServerModule, {'htmlfile', {Req, Caller}}]) ->
         {ok, Time} ->
             Time;
         _ ->
+            error_logger:warning_report(
+                "Could not load default heartbeat_interval value from "
+                "the application file. Setting the default value to infinity."
+            ),
             infinity
     end,
     CloseTimeout = 
