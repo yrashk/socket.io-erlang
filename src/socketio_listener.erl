@@ -24,10 +24,16 @@
 %%%===================================================================
 
 start(Options) ->
-    {ok, Pid} = supervisor:start_child(socketio_listener_sup_sup, [Options]),
-    Children = supervisor:which_children(Pid),
-    {_, Listener, _, _} = lists:keyfind(socketio_listener, 1, Children),
-    {ok, Listener}.
+    case supervisor:start_child(socketio_listener_sup_sup, [Options]) of
+        {ok, Pid} ->
+            Children = supervisor:which_children(Pid),
+            {_, Listener, _, _} = lists:keyfind(socketio_listener, 1, Children),
+            {ok, Listener};
+        {error,{already_started, Pid}} ->
+            Children = supervisor:which_children(Pid),
+            {_, Listener, _, _} = lists:keyfind(socketio_listener, 1, Children),
+            {ok, Listener}
+    end.
 
 server(Sup) ->
     Children = supervisor:which_children(Sup),
