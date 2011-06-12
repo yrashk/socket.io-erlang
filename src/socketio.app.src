@@ -10,5 +10,5 @@
 		  misultin
                  ]},
   {mod, { socketio_app, []}},
-  {env, [ {heartbeat_interval, 10000} ]}
+  {env, [ {heartbeat_interval, 10000}, {close_timeout, 8000} ]}
  ]}.
