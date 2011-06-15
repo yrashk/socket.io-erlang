@@ -62,7 +62,7 @@ init([Sup, SessionId, ServerModule, {TransportType, {Req, Index}}]) ->
             Time;
         _ ->
             error_logger:warning_report(
-                "Could not load default heartbeat_interval value from "
+                "Could not load default polling_duration value from "
                 "the application file. Setting the default value to 20000 ms."
             ),
             20000
