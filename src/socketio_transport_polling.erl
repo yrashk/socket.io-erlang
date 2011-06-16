@@ -205,20 +205,28 @@ handle_cast(_, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+%% A client has disconnected. We fire a timer (CloseTimeout)!
 handle_info({'EXIT',Port,_Reason}, #state{ connection_reference = {TransportType, _ }, close_timeout = CloseTimeout} = State) when is_port(Port) ->
     {noreply, State#state { connection_reference = {TransportType, none}}, CloseTimeout};
 
-%% Connection has timed out
+%% Connections has timed out, but is technically still active. This is like a
+%% heartbeat, but for polling connections.
 handle_info({timeout, _Ref, polling}, #state{ server_module = ServerModule,
                              connection_reference = {_TransportType, connected},
                              caller = Caller, req = Req, index = Index, sup = Sup } = State) ->
     gen_server:reply(Caller, send_message("", Req, Index, ServerModule, Sup)),
     {noreply, State};
 
-%% Client has timed out
+%% Client has timed out, no active connection found. (connection_reference = none)
 handle_info(timeout, #state{ server_module = ServerModule, caller = Caller, req = Req } = State) ->
     gen_server:reply(Caller, apply(ServerModule, respond, [Req, 200,""])),
     {stop, shutdown, State};
+
+%% client has timed out, no active connection found, but the normal close_timeout
+%% is being interrupted by the polling timeout timer interacting in here.
+%% We defer to the preceding clause.
+handle_info({timeout, _Ref, polling}, #state{ } = State) ->
+    handle_info(timeout, State);
 
 handle_info(_Info, State) ->
     {noreply, State}.

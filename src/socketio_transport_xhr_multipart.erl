@@ -206,14 +206,33 @@ handle_cast(_, #state{} = State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+%% A client has disconnected. We fire a timer (ServerTimeout)!
 handle_info({'EXIT',_Port,_Reason}, #state{ close_timeout = ServerTimeout} = State) when is_port(_Port) ->
     {noreply, State#state { connection_reference = {'xhr-multipart', none}}, ServerTimeout};
 
+%% This branch handles two purposes: 1. handling the close_timeout,
+%% 2. handling the heartbeat timeout that might comes first. The thing is,
+%% when the client connection dies, we need to wait for the close_timeout
+%% to be fired. That one can be cancelled at any time by God knows what for now,
+%% and that might be desirable. However, it can also be cancelled because we
+%% happen to receive the heartbeat timeout. Given the right setting, this will
+%% happen every time a disconnection happens at the point where the delay left to
+%% the current heartbeat is longer than the delay left to the total value of
+%% close_timout. Funny, eh?
+%% For this reason, the heartbeat timeout when we have no xhr-multipart
+%% connection reference has to be seen as the same as the close_timeout
+%% timer firing off. This is the safest way to guarantee everything will run
+%% okay.
 handle_info(timeout, #state{ server_module = ServerModule,
                              connection_reference = {'xhr-multipart', none}, req = Req, caller = Caller } = State) ->
     gen_server:reply(Caller, ServerModule:respond(Req, 200, "")),
     {stop, shutdown, State};
 
+%% See the previous clauses' comments, please.
+handle_info({timeout, _Ref, heartbeat}, #state{ connection_reference = {'xhr-multipart', none} } = State) ->
+    handle_info(timeout, State);
+
+%% Good old regular heartbeat. I admire your simplicity.
 handle_info({timeout, _Ref, heartbeat}, State) ->
     gen_server:cast(self(), heartbeat),
     {noreply, State};
