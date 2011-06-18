@@ -131,7 +131,7 @@ handle_call({'xhr-multipart', data, Req}, _From, #state{ server_module = ServerM
     ServerModule:respond(Req, 200, [{"Content-Type", "text/plain"}], "ok"),
     {reply, ok, NewState};
 
-handle_call({'xhr-multipart', data, _Reg}, _From, #state{ connection_reference = {'xhr-multipart', none} } = State) ->
+handle_call({'xhr-multipart', data, _Req}, _From, #state{ connection_reference = {'xhr-multipart', none} } = State) ->
     {reply, ok, State};
 
 %% Event management
@@ -210,7 +210,7 @@ handle_cast(_, #state{} = State) ->
 %%--------------------------------------------------------------------
 %% A client has disconnected. We fire a timer (ConnectionTimeout)!
 handle_info({'EXIT', _Port, _Reason}, #state{ close_timeout = ConnectionTimeout,
-                                            timer_ref = OldTimerRef } = State) when is_port(_Port) ->
+                                              timer_ref = OldTimerRef } = State) when is_port(_Port) ->
     NewTimer = reset_timer(OldTimerRef, ConnectionTimeout, connection_timeout),
     {noreply, State#state { connection_reference = {'xhr-multipart', none}, timer_ref = NewTimer}};
 
