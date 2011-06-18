@@ -21,6 +21,7 @@
           index,
           polling_duration,
           close_timeout,
+          timer_ref = undefined,
           event_manager,
           sup
          }).
@@ -57,23 +58,27 @@ start_link(Sup, SessionId, ServerModule, ConnectionReference) ->
 init([Sup, SessionId, ServerModule, {TransportType, {Req, Index}}]) ->
     process_flag(trap_exit, true),
     PollingDuration = 
-    case application:get_env(polling_duration) of
-        {ok, Time} ->
-            Time;
-        _ ->
-            error_logger:warning_report(
-                "Could not load default polling_duration value from "
-                "the application file. Setting the default value to 20000 ms."
-            ),
-            20000
-    end,
+        case application:get_env(polling_duration) of
+            {ok, Time} ->
+                Time;
+            _ ->
+                error_logger:warning_report(
+                    "Could not load default polling_duration value from "
+                    "the application file. Setting the default value to 20000 ms."
+                ),
+                20000
+        end,
     CloseTimeout = 
-    case application:get_env(close_timeout) of
-	{ok, Time0} ->
-	    Time0;
-	_ ->
-	    8000
-    end,
+        case application:get_env(close_timeout) of
+        	{ok, Time0} ->
+        	    Time0;
+        	_ ->
+        	    error_logger:warning_report(
+                    "Could not load default close_timeout value from "
+                    "the application file. Setting the default value to 8000 ms."
+                ),
+        	    8000
+        end,
     {ok, EventMgr} = gen_event:start_link(),
     send_message(#msg{content = SessionId}, Req, Index, ServerModule, Sup),
     {ok, #state {
@@ -82,7 +87,7 @@ init([Sup, SessionId, ServerModule, {TransportType, {Req, Index}}]) ->
        connection_reference = {TransportType, none},
        req = Req,
        index = Index,
-       polling_duration = {make_ref(), PollingDuration},
+       polling_duration = PollingDuration,
        close_timeout = CloseTimeout,
        event_manager = EventMgr,
        sup = Sup
@@ -109,30 +114,31 @@ init([Sup, SessionId, ServerModule, {TransportType, Req}]) ->
 %% Incoming data
 handle_call({_TransportType, data, Req}, From, #state{ server_module = ServerModule,
                                                        event_manager = EventManager,
+                                                       timer_ref = OldTimerRef,
                                                        polling_duration = Interval,
                                                        sup = Sup } = State) ->
     Msgs = [socketio_data:decode(#msg{content=Data}) || {"data", Data} <- ServerModule:parse_post(Req)],
     {Response, NewState} =
-    case cors_headers(ServerModule:get_headers(Req), Sup) of
-        {false, _Headers} ->
-            Reply = gen_server:reply(From, ServerModule:respond(Req, 405, "unauthorized")),
-            {Reply, State};
-        {_, Headers} ->
-            F = fun(#heartbeat{}, _Acc) ->
-                    {timer, reset_duration(Interval)};
-                (M, Acc) ->
-                    gen_event:notify(EventManager, {message, self(), M}),
-                    Acc
-            end,
-            TmpState = case lists:foldl(F, undefined, lists:flatten(Msgs)) of
-                {timer, NewInterval} ->
-                    State#state{ polling_duration = NewInterval};
-                undefined ->
-                    State
-            end,
-            Reply = gen_server:reply(From, ServerModule:respond(Req, 200, [Headers | [{"Content-Type", "text/plain"}]], "ok")),
-            {Reply, TmpState}
-    end,
+        case cors_headers(ServerModule:get_headers(Req), Sup) of
+            {false, _Headers} ->
+                Reply = gen_server:reply(From, ServerModule:respond(Req, 405, "unauthorized")),
+                {Reply, State};
+            {_, Headers} ->
+                F = fun(#heartbeat{}, _Acc) ->
+                        {timer, reset_timer(OldTimerRef, Interval, polling)};
+                    (M, Acc) ->
+                        gen_event:notify(EventManager, {message, self(), M}),
+                        Acc
+                end,
+                TmpState = case lists:foldl(F, undefined, lists:flatten(Msgs)) of
+                    {timer, NewTimerRef} ->
+                        State#state{ timer_ref = NewTimerRef };
+                    undefined ->
+                        State
+                end,
+                Reply = gen_server:reply(From, ServerModule:respond(Req, 200, [Headers | [{"Content-Type", "text/plain"}]], "ok")),
+                {Reply, TmpState}
+        end,
     {reply, Response, NewState};
 
 %% Event management
@@ -164,15 +170,16 @@ handle_call(stop, _From, State) ->
 %%--------------------------------------------------------------------
 %% Polling
 handle_cast({TransportType, polling_request, {Req, Index}, Server}, State) ->
-    handle_cast({TransportType, polling_request, Req, Server}, State#state{ index = Index});
+    handle_cast({TransportType, polling_request, Req, Server}, State#state{ index = Index });
 handle_cast({TransportType, polling_request, Req, Server}, #state { server_module = ServerModule,
                                                                     polling_duration = Interval,
+                                                                    timer_ref = OldTimerRef,
                                                                     message_buffer = [] } = State) ->
     ServerModule:ensure_longpolling_request(Req),
     link(ServerModule:socket(Req)),
     {noreply, State#state{ connection_reference = {TransportType, connected}, req = Req,
                            caller = Server,
-                           polling_duration = reset_duration(Interval) }};
+                           timer_ref = reset_timer(OldTimerRef, Interval, polling) }};
 
 handle_cast({TransportType, polling_request, Req, Server}, #state { server_module = ServerModule, 
                                                                     message_buffer = Buffer } = State) ->
@@ -185,11 +192,12 @@ handle_cast({send, Message}, #state{ connection_reference = {_TransportType, non
     {noreply, State#state{ message_buffer = lists:append(Buffer, [Message])}};
 
 handle_cast({send, Message}, #state{ server_module = ServerModule,
+                                     timer_ref = OldTimerRef,
                                      connection_reference = {TransportType, connected }, req = Req, caller = Caller,
                                      index = Index, sup = Sup, polling_duration = Interval} = State) ->
     gen_server:reply(Caller, send_message(Message, Req, Index, ServerModule, Sup)),
     {noreply, State#state{ connection_reference = {TransportType, none},
-                           polling_duration = reset_duration(Interval) }};
+                           timer_ref = reset_timer(OldTimerRef, Interval, polling) }};
 
 handle_cast(_, State) ->
     {noreply, State}.
@@ -206,27 +214,28 @@ handle_cast(_, State) ->
 %% @end
 %%--------------------------------------------------------------------
 %% A client has disconnected. We fire a timer (CloseTimeout)!
-handle_info({'EXIT',Port,_Reason}, #state{ connection_reference = {TransportType, _ }, close_timeout = CloseTimeout} = State) when is_port(Port) ->
-    {noreply, State#state { connection_reference = {TransportType, none}}, CloseTimeout};
+handle_info({'EXIT',Port,_Reason}, #state{ connection_reference = {TransportType, _ },
+                                           close_timeout = CloseTimeout,
+                                           timer_ref = OldTimerRef } = State) when is_port(Port) ->
+    NewTimerRef = reset_timer(OldTimerRef, CloseTimeout, connection_timeout),
+    {noreply, State#state { connection_reference = {TransportType, none}, timer_ref = NewTimerRef }};
 
 %% Connections has timed out, but is technically still active. This is like a
 %% heartbeat, but for polling connections.
 handle_info({timeout, _Ref, polling}, #state{ server_module = ServerModule,
                              connection_reference = {_TransportType, connected},
+                             timer_ref = _Ref,
                              caller = Caller, req = Req, index = Index, sup = Sup } = State) ->
     gen_server:reply(Caller, send_message("", Req, Index, ServerModule, Sup)),
     {noreply, State};
 
 %% Client has timed out, no active connection found. (connection_reference = none)
-handle_info(timeout, #state{ server_module = ServerModule, caller = Caller, req = Req } = State) ->
+handle_info({timeout, _Ref, connection_timeout}, #state{ server_module = ServerModule,
+                                                         timer_ref = _Ref,
+                                                         caller = Caller,
+                                                         req = Req } = State) ->
     gen_server:reply(Caller, apply(ServerModule, respond, [Req, 200,""])),
     {stop, shutdown, State};
-
-%% client has timed out, no active connection found, but the normal close_timeout
-%% is being interrupted by the polling timeout timer interacting in here.
-%% We defer to the preceding clause.
-handle_info({timeout, _Ref, polling}, #state{ } = State) ->
-    handle_info(timeout, State);
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -320,7 +329,7 @@ cors_headers(Headers, Sup) ->
 	    end
     end.
 
-reset_duration({TimerRef, Time}) ->
-    erlang:cancel_timer(TimerRef),
-    NewRef = erlang:start_timer(Time, self(), polling),
-    {NewRef, Time}.
+reset_timer(TimerRef, Time, Message) ->
+    io:format("reset_timer(~p, ~p, ~p).~n", [TimerRef, Time, Message]),
+    catch(erlang:cancel_timer(TimerRef)),
+    erlang:start_timer(Time, self(), Message).
