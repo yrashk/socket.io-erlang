@@ -330,6 +330,5 @@ cors_headers(Headers, Sup) ->
     end.
 
 reset_timer(TimerRef, Time, Message) ->
-    io:format("reset_timer(~p, ~p, ~p).~n", [TimerRef, Time, Message]),
     catch(erlang:cancel_timer(TimerRef)),
     erlang:start_timer(Time, self(), Message).

@@ -131,7 +131,7 @@ handle_call({'htmlfile', data, Req}, _From, #state{ heartbeat_interval = Interva
     ServerModule:respond(Req, 200, [{"Content-Type", "text/plain"}], "ok"),
     {reply, ok, NewState};
 
-handle_call({'htmlfile', data, Req}, _From, #state{ connection_reference = {'htmlfile', none} } = State) ->
+handle_call({'htmlfile', data, _Req}, _From, #state{ connection_reference = {'htmlfile', none} } = State) ->
     {reply, ok, State};
 
 %% Event management
