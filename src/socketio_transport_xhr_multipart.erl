@@ -195,7 +195,6 @@ handle_cast({send, Message}, #state{ req = Req,
 handle_cast(_, #state{} = State) ->
     {noreply, State}.
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -207,7 +206,8 @@ handle_cast(_, #state{} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 %% A client has disconnected. We fire a timer (ServerTimeout)!
-handle_info({'EXIT',_Port,_Reason}, #state{ close_timeout = ServerTimeout} = State) when is_port(_Port) ->
+handle_info({'EXIT',Connection,_Reason}, #state{ close_timeout = ServerTimeout} = State) when is_port(Connection);
+											      is_pid(Connection)->
     {noreply, State#state { connection_reference = {'xhr-multipart', none}}, ServerTimeout};
 
 %% This branch handles two purposes: 1. handling the close_timeout,
