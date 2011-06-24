@@ -176,7 +176,7 @@ handle_cast({TransportType, polling_request, Req, Server}, #state { server_modul
 
 handle_cast({TransportType, polling_request, Req, Server}, #state { server_module = ServerModule, 
                                                                     message_buffer = Buffer } = State) ->
-    link(apply(ServerModule, socket, [Req])),
+    link(ServerModule:socket(Req)),
     handle_cast({send, {buffer, Buffer}}, State#state{ connection_reference = {TransportType, connected},
 						       req = Req, caller = Server, message_buffer = []});
 
@@ -206,7 +206,8 @@ handle_cast(_, State) ->
 %% @end
 %%--------------------------------------------------------------------
 %% A client has disconnected. We fire a timer (CloseTimeout)!
-handle_info({'EXIT',Port,_Reason}, #state{ connection_reference = {TransportType, _ }, close_timeout = CloseTimeout} = State) when is_port(Port) ->
+handle_info({'EXIT',Connection,_Reason}, #state{ connection_reference = {TransportType, _ }, close_timeout = CloseTimeout} = State) when is_port(Connection);
+																	 is_pid(Connection)->
     {noreply, State#state { connection_reference = {TransportType, none}}, CloseTimeout};
 
 %% Connections has timed out, but is technically still active. This is like a
