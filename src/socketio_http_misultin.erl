@@ -36,7 +36,12 @@ stream(Request, Data) ->
     misultin_req:stream(Data, Request).
 
 socket(Request) ->
-    misultin_req:get(socket, Request).
+    get_socket(misultin_req:get(socket, Request)).
+
+get_socket({sslsocket, new_ssl, Pid}) ->
+    Pid;
+get_socket(Socket) ->
+    Socket.
 
 get_headers(Request) ->
     misultin_req:get(headers, Request).
