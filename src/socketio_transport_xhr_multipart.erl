@@ -238,7 +238,6 @@ handle_info({timeout, _Ref, heartbeat}, State) ->
     {noreply, State};
 
 handle_info(_Info, State) ->
-    io:format("FOO"),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
