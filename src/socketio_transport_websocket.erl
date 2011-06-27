@@ -52,17 +52,7 @@ start_link(Sup, SessionId, ServerModule, ConnectionReference) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Sup, SessionId, ServerModule, ConnectionReference]) ->
-    HeartbeatInterval = 
-    case application:get_env(heartbeat_interval) of
-        {ok, Time} ->
-            Time;
-        _ ->
-            error_logger:warning_report(
-                "Could not load default heartbeat_interval value from "
-                "the application file. Setting the default value to 10000 ms."
-            ),
-            10000
-    end,
+    HeartbeatInterval = socketio:get_env(heartbeat_interval, 10000),
     {ok, EventMgr} = gen_event:start_link(),
     socketio_client:send(self(), #msg{ content = SessionId }),
     gen_server:cast(self(), heartbeat),

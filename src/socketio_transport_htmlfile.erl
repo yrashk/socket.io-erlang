@@ -56,24 +56,8 @@ start_link(Sup, SessionId, ServerModule, ConnectionReference) ->
 init([Sup, SessionId, ServerModule, {'htmlfile', {Req, Caller}}]) ->
     apply(ServerModule, ensure_longpolling_request, [Req]),
     process_flag(trap_exit, true),
-    HeartbeatInterval = 
-    case application:get_env(heartbeat_interval) of
-        {ok, Time} ->
-            Time;
-        _ ->
-            error_logger:warning_report(
-                "Could not load default heartbeat_interval value from "
-                "the application file. Setting the default value to 10000."
-            ),
-            10000
-    end,
-    CloseTimeout = 
-    case application:get_env(close_timeout) of
-	{ok, Time0} ->
-	    Time0;
-	_ ->
-	    8000
-    end,
+    HeartbeatInterval = socketio:get_env(heartbeat_interval, 10000),
+    CloseTimeout = socketio:get_env(close_timeout, 8000),
     {ok, EventMgr} = gen_event:start_link(),
     gen_server:cast(self(), {initialize, Req}),
     socketio_client:send(self(), #msg{ content = SessionId }),

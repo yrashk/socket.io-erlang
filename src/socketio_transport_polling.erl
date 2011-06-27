@@ -56,24 +56,8 @@ start_link(Sup, SessionId, ServerModule, ConnectionReference) ->
 %%--------------------------------------------------------------------
 init([Sup, SessionId, ServerModule, {TransportType, {Req, Index}}]) ->
     process_flag(trap_exit, true),
-    PollingDuration = 
-    case application:get_env(polling_duration) of
-        {ok, Time} ->
-            Time;
-        _ ->
-            error_logger:warning_report(
-                "Could not load default polling_duration value from "
-                "the application file. Setting the default value to 20000 ms."
-            ),
-            20000
-    end,
-    CloseTimeout = 
-    case application:get_env(close_timeout) of
-	{ok, Time0} ->
-	    Time0;
-	_ ->
-	    8000
-    end,
+    PollingDuration = socketio:get_env(polling_duration, 20000),
+    CloseTimeout = socketio:get_env(close_timeout, 8000),
     {ok, EventMgr} = gen_event:start_link(),
     send_message(#msg{content = SessionId}, Req, Index, ServerModule, Sup),
     {ok, #state {
