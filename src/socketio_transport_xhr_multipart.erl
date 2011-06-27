@@ -63,9 +63,9 @@ init([Sup, SessionId, ServerModule, {'xhr-multipart', {Req, Caller}}]) ->
         _ ->
             error_logger:warning_report(
                 "Could not load default heartbeat_interval value from "
-                "the application file. Setting the default value to infinity."
+                "the application file. Setting the default value to 10000."
             ),
-            infinity
+            10000
     end,
     CloseTimeout = 
     case application:get_env(close_timeout) of
@@ -89,7 +89,7 @@ init([Sup, SessionId, ServerModule, {'xhr-multipart', {Req, Caller}}]) ->
        req = Req,
        caller = Caller,
        close_timeout = CloseTimeout,
-       heartbeat_interval = HeartbeatInterval,
+       heartbeat_interval = {make_ref(), HeartbeatInterval},
        event_manager = EventMgr,
        sup = Sup
       }}.
@@ -110,19 +110,23 @@ init([Sup, SessionId, ServerModule, {'xhr-multipart', {Req, Caller}}]) ->
 %%--------------------------------------------------------------------
 %% Incoming data
 handle_call({'xhr-multipart', data, Req}, _From, #state{ server_module = ServerModule,
-                                                         heartbeat_interval = Interval, event_manager = EventManager } = State) ->
-    Data = apply(ServerModule, parse_post, [Req]),
-    Self = self(),
-    lists:foreach(fun({"data", M}) ->
-        spawn(fun () ->
-            F = fun(#heartbeat{}) -> ignore;
-                   (M0) -> gen_event:notify(EventManager, {message, Self,  M0})
-            end,
-            [F(Msg) || Msg <- socketio_data:decode(#msg{content=M})]
-        end)
-    end, Data),
-    apply(ServerModule, respond, [Req, 200,[{"Content-Type","text/plain"}],"ok"]),
-    {reply, ok, State, Interval};
+                                                         heartbeat_interval = Interval,
+                                                         event_manager = EventManager } = State) ->
+    Msgs = [socketio_data:decode(#msg{content=Data}) || {"data", Data} <- ServerModule:parse_post(Req)],
+    F = fun(#heartbeat{}, _Acc) ->
+            {timer, reset_heartbeat(Interval)};
+        (M, Acc) ->
+            gen_event:notify(EventManager, {message, self(), M}),
+            Acc
+    end,
+    NewState = case lists:foldl(F, undefined, lists:flatten(Msgs)) of
+        {timer, NewInterval} ->
+            State#state{ heartbeat_interval = NewInterval};
+        undefined ->
+            State
+    end,
+    ServerModule:respond(Req, 200, [{"Content-Type", "text/plain"}], "ok"),
+    {reply, ok, NewState};
 
 %% Event management
 handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
@@ -152,8 +156,8 @@ handle_call(stop, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({initialize, Req}, #state{ server_module = ServerModule, heartbeat_interval = Interval } = State) ->
-    Headers = apply(ServerModule, get_headers, [Req]),
-    Headers1 = 
+    Headers = ServerModule:get_headers(Req),
+    Headers1 =
     case proplists:get_value('Origin', Headers) of
         undefined ->
             Headers;
@@ -161,33 +165,35 @@ handle_cast({initialize, Req}, #state{ server_module = ServerModule, heartbeat_i
             case socketio_listener:verify_origin(Origin, socketio_listener:origins(listener(State))) of
                 true ->
                     [{"Access-Control-Allow-Origin", "*"},
-                     {"Access-Control-Allow-Credentials", "true"}|Headers];
+                     {"Access-Control-Allow-Credentials", "true"} | Headers];
                 false ->
                     Headers
             end
     end,
-    link(apply(ServerModule, socket, [Req])),
-    apply(ServerModule, headers, [Req,  [{"Content-Type", "multipart/x-mixed-replace;boundary=\"socketio\""},
-                                             {"Connection", "Keep-Alive"}|Headers1]]),
-    apply(ServerModule, stream, [Req, "--socketio\n"]),
-    {noreply, State#state{ connection_reference = {'xhr-multipart', connected} }, Interval};
+    link(ServerModule:socket(Req)),
+    ServerModule:headers(Req, [{"Content-Type", "multipart/x-mixed-replace;boundary=\"socketio\""},
+                               {"Connection", "Keep-Alive"} | Headers1]),
+    ServerModule:stream(Req, "--socketio\n"),
+    {noreply, State#state{ connection_reference = {'xhr-multipart', connected},
+                           heartbeat_interval = reset_heartbeat(Interval) }};
 
 handle_cast(heartbeat, #state{ heartbeats = Beats,
                                heartbeat_interval = Interval } = State) ->
     Beats1 = Beats + 1,
     socketio_client:send(self(), #heartbeat{ index = Beats1 }),
-    {noreply, State#state { heartbeats = Beats1 }, Interval};
+    {noreply, State#state { heartbeats = Beats1,
+                            heartbeat_interval = reset_heartbeat(Interval) }};
 
 %% Send
 handle_cast({send, Message}, #state{ req = Req, 
                                      server_module = ServerModule,
-                                     connection_reference = {'xhr-multipart', connected }, heartbeat_interval = Interval } = State) ->
+                                     connection_reference = {'xhr-multipart', connected },
+                                     heartbeat_interval = Interval } = State) ->
     send_message(Message, Req, ServerModule),
-    {noreply, State, Interval};
+    {noreply, State#state{ heartbeat_interval = reset_heartbeat(Interval) }};
 
 handle_cast(_, #state{} = State) ->
     {noreply, State}.
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -199,15 +205,35 @@ handle_cast(_, #state{} = State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({'EXIT',_Port,_Reason}, #state{ close_timeout = ServerTimeout} = State) when is_port(_Port) ->
+%% A client has disconnected. We fire a timer (ServerTimeout)!
+handle_info({'EXIT',Connection,_Reason}, #state{ close_timeout = ServerTimeout} = State) when is_port(Connection);
+											      is_pid(Connection)->
     {noreply, State#state { connection_reference = {'xhr-multipart', none}}, ServerTimeout};
 
+%% This branch handles two purposes: 1. handling the close_timeout,
+%% 2. handling the heartbeat timeout that might comes first. The thing is,
+%% when the client connection dies, we need to wait for the close_timeout
+%% to be fired. That one can be cancelled at any time by God knows what for now,
+%% and that might be desirable. However, it can also be cancelled because we
+%% happen to receive the heartbeat timeout. Given the right setting, this will
+%% happen every time a disconnection happens at the point where the delay left to
+%% the current heartbeat is longer than the delay left to the total value of
+%% close_timout. Funny, eh?
+%% For this reason, the heartbeat timeout when we have no xhr-multipart
+%% connection reference has to be seen as the same as the close_timeout
+%% timer firing off. This is the safest way to guarantee everything will run
+%% okay.
 handle_info(timeout, #state{ server_module = ServerModule,
                              connection_reference = {'xhr-multipart', none}, req = Req, caller = Caller } = State) ->
-    gen_server:reply(Caller, apply(ServerModule, respond, [Req, 200, ""])),
+    gen_server:reply(Caller, ServerModule:respond(Req, 200, "")),
     {stop, shutdown, State};
 
-handle_info(timeout, State) ->
+%% See the previous clauses' comments, please.
+handle_info({timeout, _Ref, heartbeat}, #state{ connection_reference = {'xhr-multipart', none} } = State) ->
+    handle_info(timeout, State);
+
+%% Good old regular heartbeat. I admire your simplicity.
+handle_info({timeout, _Ref, heartbeat}, State) ->
     gen_server:cast(self(), heartbeat),
     {noreply, State};
 
@@ -255,3 +281,8 @@ send_message(Message, Req, ServerModule) ->
 
 listener(#state{ sup = Sup }) ->
     socketio_listener:server(Sup).
+
+reset_heartbeat({TimerRef, Time}) ->
+    erlang:cancel_timer(TimerRef),
+    NewRef = erlang:start_timer(Time, self(), heartbeat),
+    {NewRef, Time}.
