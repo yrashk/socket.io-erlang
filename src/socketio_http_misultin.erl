@@ -1,5 +1,8 @@
 -module(socketio_http_misultin).
 -behaviour(socketio_http_server).
+
+-define(CALL_TIMEOUT, 20000). %% Instead of the default 5000 - to be able to handle a larger concurrent connections amount
+
 -export([start_link/1, file/2, respond/2, respond/3, respond/4, parse_post/1, headers/2, chunk/2, stream/2,
          socket/1, get_headers/1, websocket_send/2, ensure_longpolling_request/1]).
 
@@ -101,7 +104,9 @@ handle_websocket_1(Server, Resource, ["flashsocket"|Resource], Ws) ->
     handle_websocket_1(Server, Resource, ["websocket"|Resource], Ws);
 
 handle_websocket_1(Server, Resource, ["websocket"|Resource], Ws) ->
-    {SessionID, Pid} = gen_server:call(Server, {session, generate, {websocket, Ws}, socketio_transport_websocket}),
+    {SessionID, Pid} =
+      gen_server:call(Server, {session, generate, {websocket, Ws}, socketio_transport_websocket},
+                      ?CALL_TIMEOUT),
     handle_websocket(Server, Ws, SessionID, Pid);
 handle_websocket_1(_Server, _Resource, _WsResource, _Ws) ->
     ignore. %% FIXME: pass it through to the end user?
@@ -109,10 +114,10 @@ handle_websocket_1(_Server, _Resource, _WsResource, _Ws) ->
 handle_websocket(Server, Ws, SessionID, Pid) ->
     receive
         {browser, Data} ->
-            gen_server:call(Pid, {websocket, Data, Ws}),
+            gen_server:call(Pid, {websocket, Data, Ws}, ?CALL_TIMEOUT),
             handle_websocket(Server, Ws, SessionID, Pid);
         closed ->
-            gen_server:call(Pid, stop);
+            gen_server:call(Pid, stop, ?CALL_TIMEOUT);
         _Ignore ->
             handle_websocket(Server, Ws, SessionID, Pid)
     end.
