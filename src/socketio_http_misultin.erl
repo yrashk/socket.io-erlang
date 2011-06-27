@@ -57,6 +57,8 @@ create_options(Port, HttpProcess, Resource, undefined) ->
      {name, false},
      {loop, fun (Req) -> handle_http(HttpProcess, Req) end},
      {ws_loop, fun (Ws) -> handle_websocket(HttpProcess, Resource, Ws) end},
+     {backlog, socketio:get_env(backlog, 128)},
+     {max_connections, socketio:get_env(max_connections, 1024)},
      {ws_autoexit, false},
      {autoexit, false}];
 create_options(Port, HttpProcess, Resource, SSL) ->
@@ -67,6 +69,8 @@ create_options(Port, HttpProcess, Resource, SSL) ->
      {name, false},
      {loop, fun (Req) -> handle_http(HttpProcess, Req) end},
      {ws_loop, fun (Ws) -> handle_websocket(HttpProcess, Resource, Ws) end},
+     {backlog, socketio:get_env(backlog, 128)},
+     {max_connections, socketio:get_env(max_connections, 1024)},
      {ws_autoexit, false},
      {autoexit, false},
      {ssl, [{certfile, Certfile},
