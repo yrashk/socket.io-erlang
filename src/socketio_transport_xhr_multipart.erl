@@ -122,7 +122,7 @@ handle_call(req, _From, #state{ req = Req} = State) ->
 
 %% Flow control
 handle_call(stop, _From, State) ->
-    {stop, shutdown, State}.
+    {stop, normal, State}.
 
 
 %%--------------------------------------------------------------------
@@ -202,7 +202,7 @@ handle_info({'EXIT',Connection,_Reason}, #state{ close_timeout = ServerTimeout} 
 handle_info(timeout, #state{ server_module = ServerModule,
                              connection_reference = {'xhr-multipart', none}, req = Req, caller = Caller } = State) ->
     gen_server:reply(Caller, ServerModule:respond(Req, 200, "")),
-    {stop, shutdown, State};
+    {stop, normal, State};
 
 %% See the previous clauses' comments, please.
 handle_info({timeout, _Ref, heartbeat}, #state{ connection_reference = {'xhr-multipart', none} } = State) ->

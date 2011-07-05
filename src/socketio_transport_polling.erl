@@ -133,7 +133,7 @@ handle_call(req, _From, #state{ req = Req} = State) ->
 
 %% Flow control
 handle_call(stop, _From, State) ->
-    {stop, shutdown, State}.
+    {stop, normal, State}.
 
 
 %%--------------------------------------------------------------------
@@ -205,7 +205,7 @@ handle_info({timeout, _Ref, polling}, #state{ server_module = ServerModule,
 %% Client has timed out, no active connection found. (connection_reference = none)
 handle_info(timeout, #state{ server_module = ServerModule, caller = Caller, req = Req } = State) ->
     gen_server:reply(Caller, apply(ServerModule, respond, [Req, 200,""])),
-    {stop, shutdown, State};
+    {stop, normal, State};
 
 %% client has timed out, no active connection found, but the normal close_timeout
 %% is being interrupted by the polling timeout timer interacting in here.

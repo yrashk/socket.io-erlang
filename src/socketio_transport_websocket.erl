@@ -112,7 +112,7 @@ handle_call(req, _From, #state{ connection_reference = {websocket, Ws}} = State)
 
 %% Flow control
 handle_call(stop, _From, State) ->
-    {stop, shutdown, State}.
+    {stop, normal, State}.
 
 
 %%--------------------------------------------------------------------
