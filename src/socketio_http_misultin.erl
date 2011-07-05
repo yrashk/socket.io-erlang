@@ -120,8 +120,12 @@ handle_websocket_1(_Server, _Resource, _WsResource, _Ws) ->
 handle_websocket(Server, Ws, SessionID, Pid) ->
     receive
         {browser, Data} ->
-            gen_server:call(Pid, {websocket, Data, Ws}, ?CALL_TIMEOUT),
-            handle_websocket(Server, Ws, SessionID, Pid);
+            try gen_server:call(Pid, {websocket, Data, Ws}, ?CALL_TIMEOUT) of
+              _ -> handle_websocket(Server, Ws, SessionID, Pid)
+            catch
+              _:noproc -> ok;
+              _:{noproc, _} -> ok
+            end;
         closed ->
             gen_server:call(Pid, stop, ?CALL_TIMEOUT);
         _Ignore ->
