@@ -289,7 +289,9 @@ cors_headers(ServerModule, Req, Sup) ->
 	undefined ->
 	    {undefined, []};
 	Origin ->
-	    case socketio_listener:verify_origin(Origin, socketio_listener:origins(Sup)) of
+	    case socketio_listener:verify_origin(Origin,
+                                           socketio_listener:origins(
+                                             socketio_listener:server(Sup))) of
 		true ->
 		    Headers0 = [{"Access-Control-Allow-Origin", "*"}],
 		    Headers1 =
