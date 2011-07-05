@@ -285,27 +285,22 @@ send_message_1(Headers, Message, Req, Index, ServerModule) ->
     apply(ServerModule, respond, [Req, 200, Headers0, Message1]).
 
 cors_headers(ServerModule, Req, Sup) ->
-    case ServerModule:get_header_value('Origin', Req) of
-	undefined ->
-	    {undefined, []};
-	Origin ->
-	    case socketio_listener:verify_origin(Origin,
-                                           socketio_listener:origins(
-                                             socketio_listener:server(Sup))) of
-		true ->
-		    Headers0 = [{"Access-Control-Allow-Origin", "*"}],
-		    Headers1 =
-			case ServerModule:get_header_value('Cookie', Req) of
-			    undefined ->
-				Headers0;
-			    _Cookie ->
-				[{"Access-Control-Allow-Credentials", "true"}|Headers0]
-			end,
-		    {true, [Headers1]};
-		false ->
-		    {false, ServerModule:get_headers(Req)}
-	    end
-    end.
+  case socketio_listener:verify_origin(ServerModule:get_header_value('Origin', Req),
+                                       socketio_listener:origins(
+                                         socketio_listener:server(Sup))) of
+    true ->
+      Headers0 = [{"Access-Control-Allow-Origin", "*"}],
+      Headers1 =
+        case ServerModule:get_header_value('Cookie', Req) of
+          undefined ->
+            Headers0;
+          _Cookie ->
+            [{"Access-Control-Allow-Credentials", "true"}|Headers0]
+        end,
+      {true, [Headers1]};
+    false ->
+      {false, ServerModule:get_headers(Req)}
+  end.
 
 reset_duration({TimerRef, Time}) ->
     erlang:cancel_timer(TimerRef),

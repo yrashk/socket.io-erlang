@@ -59,6 +59,8 @@ origins(Server) ->
 origins(Server, Origins) ->
     gen_server:call(Server, {origins, Origins}).
 
+verify_origin(undefined, Origins) ->
+    verify_origin_1(undefined, Origins);
 verify_origin(Origin, Origins) ->
     case ex_uri:decode(Origin) of
       {ok, #ex_uri{ authority = #ex_uri_authority{ host = Host, port = Port } } = _URI, _} ->

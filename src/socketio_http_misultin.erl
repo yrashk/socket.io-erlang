@@ -49,7 +49,10 @@ get_headers(Request) ->
     misultin_req:get(headers, Request).
 
 get_header_value(Tag, Request) ->
-    misultin_utility:header_get_value(Tag, misultin_req:get(headers, Request)).
+    case misultin_utility:header_get_value(Tag, misultin_req:get(headers, Request)) of
+      false -> undefined;
+      Value -> Value
+    end.
 
 websocket_send(Ws, Data) ->
     misultin_ws:send(Data, Ws).
