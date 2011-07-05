@@ -60,8 +60,13 @@ origins(Server, Origins) ->
     gen_server:call(Server, {origins, Origins}).
 
 verify_origin(Origin, Origins) ->
-    {ok, #ex_uri{ authority = #ex_uri_authority{ host = Host, port = Port } } = _URI, _} = ex_uri:decode(Origin),
-    verify_origin_1({Host, Port}, Origins).
+    case ex_uri:decode(Origin) of
+      {ok, #ex_uri{ authority = #ex_uri_authority{ host = Host, port = Port } } = _URI, _} ->
+        verify_origin_1({Host, Port}, Origins);
+      fail ->
+        error_logger:error_msg("Invalid origin: ~p~n", Origin),
+        false
+    end.
 
 %%%===================================================================
 %%% gen_server callbacks
