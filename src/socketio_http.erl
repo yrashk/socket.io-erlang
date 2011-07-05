@@ -197,6 +197,10 @@ handle_call({request, 'POST', ["send", SessionId, "htmlfile"|Resource], Req }, _
 %% If we can't route it, let others deal with it
 handle_call({request, _Method, _Path, _Req} = Req, From, #state{ default_http_handler = {HttpHandler,Args} } = State) when is_atom(HttpHandler) ->
     handle_call(Req, From, State#state{ default_http_handler = fun(P1, P2, P3) -> apply(HttpHandler, handle_request, [P1, P2, P3 | Args]) end });
+handle_call({request, _Method, _Path, Req}, _From, #state{ default_http_handler = undefined,
+                                                           server_module = ServerModule } = State) ->
+    Response = ServerModule:respond(Req, 404, ""),
+    {reply, Response, State};
 handle_call({request, _Method, _Path, _Req} = Req, From, #state{ default_http_handler = HttpHandler } = State) when is_atom(HttpHandler) ->
     handle_call(Req, From, State#state{ default_http_handler = fun(P1, P2, P3) -> HttpHandler:handle_request(P1, P2, P3) end });
 
