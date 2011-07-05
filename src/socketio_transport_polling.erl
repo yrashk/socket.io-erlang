@@ -97,7 +97,7 @@ handle_call({_TransportType, data, Req}, From, #state{ server_module = ServerMod
                                                        sup = Sup } = State) ->
     Msgs = [socketio_data:decode(#msg{content=Data}) || {"data", Data} <- ServerModule:parse_post(Req)],
     {Response, NewState} =
-    case cors_headers(ServerModule:get_headers(Req), Sup) of
+    case cors_headers(ServerModule, Req, Sup) of
         {false, _Headers} ->
             Reply = gen_server:reply(From, ServerModule:respond(Req, 405, "unauthorized")),
             {Reply, State};
@@ -261,7 +261,7 @@ send_message({buffer, Messages}, Req, Index, ServerModule, Sup) ->
 send_message(Message, Req, undefined, ServerModule, Sup) ->
     Headers = [{"Connection", "keep-alive"}],
     Headers0 =
-	case cors_headers(apply(ServerModule, get_headers, [Req]), Sup) of
+	case cors_headers(ServerModule, Req, Sup) of
 	    {false, _} ->
 		Headers;
 	    {_, Headers1} ->
@@ -271,7 +271,7 @@ send_message(Message, Req, undefined, ServerModule, Sup) ->
 
 send_message(Message, Req, Index, ServerModule, Sup) ->
     Headers = [{"Connection", "keep-alive"}],
-    case cors_headers(apply(ServerModule, get_headers, [Req]), Sup) of
+    case cors_headers(ServerModule, Req, Sup) of
 	{false, _} ->
 	    apply(ServerModule, respond, [Req, 200, "alert('Cross domain security restrictions not met');"]);
 	{_, Headers0} ->
@@ -284,8 +284,8 @@ send_message_1(Headers, Message, Req, Index, ServerModule) ->
     Message1 = "io.JSONP["++Index++"]._(" ++ Message0 ++ ");",
     apply(ServerModule, respond, [Req, 200, Headers0, Message1]).
 
-cors_headers(Headers, Sup) ->
-    case proplists:get_value('Origin', Headers) of
+cors_headers(ServerModule, Req, Sup) ->
+    case ServerModule:get_header_value('Origin', Req) of
 	undefined ->
 	    {undefined, []};
 	Origin ->
@@ -293,7 +293,7 @@ cors_headers(Headers, Sup) ->
 		true ->
 		    Headers0 = [{"Access-Control-Allow-Origin", "*"}],
 		    Headers1 =
-			case proplists:get_value('Cookie', Headers) of
+			case ServerModule:get_header_value('Cookie', Req) of
 			    undefined ->
 				Headers0;
 			    _Cookie ->
@@ -301,7 +301,7 @@ cors_headers(Headers, Sup) ->
 			end,
 		    {true, [Headers1]};
 		false ->
-		    {false, Headers}
+		    {false, ServerModule:get_headers(Req)}
 	    end
     end.
 

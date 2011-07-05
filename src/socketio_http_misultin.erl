@@ -4,7 +4,7 @@
 -define(CALL_TIMEOUT, 20000). %% Instead of the default 5000 - to be able to handle a larger concurrent connections amount
 
 -export([start_link/1, file/2, respond/2, respond/3, respond/4, parse_post/1, headers/2, chunk/2, stream/2,
-         socket/1, get_headers/1, websocket_send/2, ensure_longpolling_request/1]).
+         socket/1, get_headers/1, get_header_value/2, websocket_send/2, ensure_longpolling_request/1]).
 
 start_link(Opts) ->
     Port = proplists:get_value(port, Opts),
@@ -47,6 +47,9 @@ get_socket(Socket) ->
 
 get_headers(Request) ->
     misultin_req:get(headers, Request).
+
+get_header_value(Tag, Request) ->
+    misultin_utility:header_get_value(Tag, misultin_req:get(headers, Request)).
 
 websocket_send(Ws, Data) ->
     misultin_ws:send(Data, Ws).

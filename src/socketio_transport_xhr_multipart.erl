@@ -138,7 +138,7 @@ handle_call(stop, _From, State) ->
 handle_cast({initialize, Req}, #state{ server_module = ServerModule, heartbeat_interval = Interval } = State) ->
     Headers = ServerModule:get_headers(Req),
     Headers1 =
-    case proplists:get_value('Origin', Headers) of
+    case ServerModule:get_header_value('Origin', Req) of
         undefined ->
             Headers;
         Origin ->
