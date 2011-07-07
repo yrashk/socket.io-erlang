@@ -1,7 +1,7 @@
 -module(socketio_http_misultin).
 -behaviour(socketio_http_server).
 
--define(CALL_TIMEOUT, 20000). %% Instead of the default 5000 - to be able to handle a larger concurrent connections amount
+-define(CALL_TIMEOUT, 60000). %% Instead of the default 5000 - to be able to handle a larger concurrent connections amount
 
 -export([start_link/1, file/2, respond/2, respond/3, respond/4, parse_post/1, headers/2, chunk/2, stream/2,
          socket/1, get_headers/1, get_header_value/2, websocket_send/2, ensure_longpolling_request/1]).
