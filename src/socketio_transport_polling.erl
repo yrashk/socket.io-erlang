@@ -296,7 +296,7 @@ send_message(Message, Req, Index, ServerModule, Sup) ->
 
 send_message_1(Headers, Message, Req, Index, ServerModule) ->
     Headers0 = [{"Content-Type", "text/javascript; charset=UTF-8"}|Headers],
-    Message0 = binary_to_list(jsx:term_to_json(list_to_binary(Message), [{strict, false}])),
+    Message0 = unicode:characters_to_list(jsx:format(jsx:term_to_json(list_to_binary(Message), [{strict, false}]))),
     Message1 = "io.JSONP["++Index++"]._(" ++ Message0 ++ ");",
     apply(ServerModule, respond, [Req, 200, Headers0, Message1]).
 
