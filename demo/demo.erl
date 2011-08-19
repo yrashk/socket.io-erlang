@@ -32,8 +32,30 @@ handle_event({disconnect, Pid}, State) ->
     {ok, State};
 handle_event({message, Client, #msg{ content = Content } = Msg}, State) ->
     io:format("Got a message: ~p from ~p~n",[Msg, Client]),
+    Struct = [[{<<"action">>,<<"feedback">>},
+                {<<"payload">>,
+                [{<<"context">>,<<"order_ack">>},
+                 {<<"report_id">>,90},
+                 {<<"report_type">>,<<"new">>},
+                 {<<"order_id">>,76},
+                 {<<"user_id">>,<<"stig">>},
+                 {<<"client_order_id">>,6},
+                 {<<"client_head_id">>,6},
+                 {<<"order_type">>,<<"new">>},
+                 {<<"status">>,<<"new">>},
+                 {<<"fill_type">>,<<"day">>},
+                 {<<"book_id">>,<<"usd_rate_outright_2">>},
+                 {<<"side">>,<<"bid">>},
+                 {<<"price">>,9000},
+                 {<<"order_qty">>,120},
+                 {<<"head_qty">>,120},
+                 {<<"display_qty">>,<<"undefined">>},
+                 {<<"fill_qty">>,0},
+                 {<<"left_qty">>,120},
+                 {<<"child_id">>,<<"undefined">>},
+                 {<<"head_id">>,76}]}]],
     socketio_client:send(Client, #msg{ content = "hello!" }),
-    socketio_client:send(Client, #msg{ content = [{<<"echo">>, Content}], json = true}),
+    socketio_client:send(Client, #msg{ content = Struct, json = true}),
     {ok, State};
 
 handle_event(E, State) ->
