@@ -42,9 +42,13 @@ Make sure you have the erlang-crypto and erlang-dev packages installed if you're
 your Erlang manually, as Erlang packages in Linux distros tend to be
 either outdated or broken. Or both.
 
+## Roadmap
+Socket.io-erlang has entered maintenance mode. The original [socket.io](http://socket.io) library has been upgraded to version 0.7.x (and the oddly similar version 0.8.x), which is incompatible with major ways with the 0.6.x versions that socket.io-erlang implements. The latest versions took more and more the shape of an entire framework that breaks backwards compatibility on the client-side as well as the server side, which the current socket.io-erlang team of maintainers disagree with.
+
+Because of this, we will be keeping the socket.io-erlang features as they are. We will still maintain the application and try to fix all issues and bugs to keep it working, but the development itself will be stalled.
+
 ## TODO
 
 - License
 - How can I contribute?
-- Roadmap
 - Known Issues
