@@ -82,8 +82,8 @@ gen_encoded({N, Encoded}) ->
 gen_string() ->
     ?LAZY(weighted_union([
         {1, []},
-        {1, [$~|string()]},
-        {10, [char()|gen_string()]}
+        {1, [$~|proper_stdgen:utf8_string()]},
+        {10, [proper_stdgen:unicode_char()|gen_string()]}
     ])).
 
 heartbeat() -> ?LET(N, int(), abs(N)).
@@ -102,14 +102,14 @@ json_data() ->
 json_object() ->
     ?LAZY(union([[], [key(), val()]])).
 
-key() -> {key, ascii()}.
+key() -> {key, proper_stdgen:utf8_string()}.
 val() ->
     union([
         {literal,true},
         {literal,false},
         {literal,null},
         {integer,?LET(N, int(), integer_to_list(N))},
-        {string, ascii()},
+        {string, proper_stdgen:utf8_string()},
         {float,
          ?LET({A,B}, {int(),nat()}, integer_to_list(A)++[$.]++integer_to_list(B))}
     ]).
