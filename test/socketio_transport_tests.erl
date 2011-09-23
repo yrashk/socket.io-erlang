@@ -57,7 +57,7 @@ transport_tests(BrowserCommand, Transport) ->
                   ets:insert(socketio_tests, {transport, Transport}),
                   error_logger:delete_report_handler(error_logger_tty_h), %% suppress annoying kernel logger
                   application:start(misultin),
-		                application:start(socketio),
+		  application:start(socketio),
                   {ok, Pid} = socketio_listener:start([{http_port, 8989}, 
                                                        {default_http_handler, ?MODULE}]),
                   EventMgr = socketio_listener:event_manager(Pid),
