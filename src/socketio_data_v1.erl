@@ -8,7 +8,7 @@
 
 %% Framing is only given when no other suitable mode exists. In this case,
 %% XHR-multipart will already frame these.
-%% It is not defined whether we should 
+%% It is not defined whether we should
 -define(FRAME, 16#fffd).
 -define(BINFRAME, <<65533>>).
 -define(RESERVED_EVENTS, [<<"message">>, <<"connect">>, <<"disconnect">>,

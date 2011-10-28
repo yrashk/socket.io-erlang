@@ -9,7 +9,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--define(SERVER, ?MODULE). 
+-define(SERVER, ?MODULE).
 
 -record(state, {
           session_id,
@@ -52,7 +52,7 @@ start_link(Sup, SessionId, ServerModule, ConnectionReference) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Sup, SessionId, ServerModule, ConnectionReference]) ->
-    HeartbeatInterval = 
+    HeartbeatInterval =
     case application:get_env(heartbeat_interval) of
         {ok, Time} ->
             Time;
@@ -142,7 +142,7 @@ handle_cast({send, Message}, #state{ server_module = ServerModule,
     handle_send(ConnectionReference, Message, ServerModule),
     {noreply, State#state{ heartbeat_interval = reset_interval(Interval) }};
 
-handle_cast(heartbeat, #state{ 
+handle_cast(heartbeat, #state{
               server_module = ServerModule,
               connection_reference = ConnectionReference, heartbeats = Beats,
               heartbeat_interval = Interval } = State) ->

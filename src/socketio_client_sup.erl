@@ -24,7 +24,7 @@ start_link() ->
 
 init([]) ->
     {ok, { {simple_one_for_one, 5, 10}, [
-                                  {socketio_client, {socketio_client, start_link, []}, 
+                                  {socketio_client, {socketio_client, start_link, []},
                                    transient, 5000, worker, [socketio_client]}
                                  ]} }.
 

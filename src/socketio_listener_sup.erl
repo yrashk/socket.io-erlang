@@ -41,10 +41,10 @@ init([Options]) ->
                                                                                Resource,
 									       SSL,
                                                                                DefaultHttpHandler,
-                                                                               self()]}, 
+                                                                               self()]},
                                    permanent, 5000, worker, [socketio_http]},
 
-                                  {socketio_client_sup, {socketio_client_sup, start_link, []}, 
+                                  {socketio_client_sup, {socketio_client_sup, start_link, []},
                                    permanent, infinity, supervisor, [socketio_client_sup]}
 
                                  ]} }.

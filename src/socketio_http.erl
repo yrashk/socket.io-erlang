@@ -9,7 +9,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--define(SERVER, ?MODULE). 
+-define(SERVER, ?MODULE).
 
 -record(state, {
           default_http_handler,
@@ -81,7 +81,7 @@ init([ServerModule, Port, Resource, SSL, DefaultHttpHandler, Sup]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({request, 'GET', ["socket.io.js"|Resource], Req}, _From, #state{ server_module = ServerModule, 
+handle_call({request, 'GET', ["socket.io.js"|Resource], Req}, _From, #state{ server_module = ServerModule,
                                                                              resource = Resource } = State) ->
     Response = apply(ServerModule, file, [Req, filename:join([filename:dirname(code:which(?MODULE)), "..", "priv", "Socket.IO", "socket.io.js"])]),
     {reply, Response, State};
@@ -96,11 +96,11 @@ handle_call({request, 'GET', [_Random, "xhr-polling"|Resource], Req }, From, #st
     handle_call({session, generate, {'xhr-polling', Req}, socketio_transport_polling}, From, State);
 
 %% Returning XHR Polling
-handle_call({request, 'GET', [_Random, SessionId, "xhr-polling"|Resource], Req }, From, 
+handle_call({request, 'GET', [_Random, SessionId, "xhr-polling"|Resource], Req }, From,
             #state{ server_module = ServerModule,
                     resource = Resource, sessions = Sessions } = State) ->
     case ets:lookup(Sessions, SessionId) of
-        [{SessionId, Pid}] -> 
+        [{SessionId, Pid}] ->
             gen_server:cast(Pid, {'xhr-polling', polling_request, Req, From});
         _ ->
             gen_server:reply(From, apply(ServerModule, respond, [Req, 404, ""]))
@@ -108,12 +108,12 @@ handle_call({request, 'GET', [_Random, SessionId, "xhr-polling"|Resource], Req }
     {noreply, State};
 
 %% Incoming XHR Polling data
-handle_call({request, 'POST', ["send", SessionId, "xhr-polling"|Resource], Req }, _From, #state{ resource = Resource, 
+handle_call({request, 'POST', ["send", SessionId, "xhr-polling"|Resource], Req }, _From, #state{ resource = Resource,
                                                                                                  server_module = ServerModule,
                                                                                                  sessions = Sessions } = State) ->
-    Response =  
+    Response =
         case ets:lookup(Sessions, SessionId) of
-            [{SessionId, Pid}] -> 
+            [{SessionId, Pid}] ->
                 gen_server:call(Pid, {'xhr-polling', data, Req});
             _ ->
                 apply(ServerModule, respond, [Req, 404, ""])
@@ -125,8 +125,8 @@ handle_call({request, 'GET', [Index, _Random, "jsonp-polling"|Resource], Req }, 
     handle_call({session, generate, {'jsonp-polling', {Req, Index}}, socketio_transport_polling}, From, State);
 
 %% Returning JSONP Polling
-handle_call({request, 'GET', [Index, _Random, SessionId, "jsonp-polling"|Resource], Req }, From, 
-            #state{ resource = Resource, 
+handle_call({request, 'GET', [Index, _Random, SessionId, "jsonp-polling"|Resource], Req }, From,
+            #state{ resource = Resource,
                     server_module = ServerModule,
                     sessions = Sessions } = State) ->
     case ets:lookup(Sessions, SessionId) of
@@ -138,13 +138,13 @@ handle_call({request, 'GET', [Index, _Random, SessionId, "jsonp-polling"|Resourc
     {noreply, State};
 
 %% Incoming JSONP Polling data
-handle_call({request, 'POST', [_Index, _Random, SessionId, "jsonp-polling"|Resource], Req }, _From, 
-            #state{ resource = Resource, 
+handle_call({request, 'POST', [_Index, _Random, SessionId, "jsonp-polling"|Resource], Req }, _From,
+            #state{ resource = Resource,
                     server_module = ServerModule,
                     sessions = Sessions } = State) ->
-    Response =  
+    Response =
         case ets:lookup(Sessions, SessionId) of
-            [{SessionId, Pid}] -> 
+            [{SessionId, Pid}] ->
                 gen_server:call(Pid, {'jsonp-polling', data, Req});
             _ ->
                 apply(ServerModule, respond, [Req, 404, ""])
@@ -157,13 +157,13 @@ handle_call({request, 'GET', ["xhr-multipart"|Resource], Req }, From, #state{ re
     {noreply, State};
 
 %% Incoming XHR Multipart data
-handle_call({request, 'POST', ["send", SessionId, "xhr-multipart"|Resource], Req }, _From, 
-            #state{ resource = Resource, 
+handle_call({request, 'POST', ["send", SessionId, "xhr-multipart"|Resource], Req }, _From,
+            #state{ resource = Resource,
                     server_module = ServerModule,
                     sessions = Sessions } = State) ->
-    Response =  
+    Response =
         case ets:lookup(Sessions, SessionId) of
-            [{SessionId, Pid}] -> 
+            [{SessionId, Pid}] ->
                 gen_server:call(Pid, {'xhr-multipart', data, Req});
             _ ->
                 apply(ServerModule, respond, [Req, 404, ""])
@@ -177,13 +177,13 @@ handle_call({request, 'GET', [_Random, "htmlfile"|Resource], Req }, From, #state
     {noreply, State};
 
 %% Incoming htmlfile data
-handle_call({request, 'POST', ["send", SessionId, "htmlfile"|Resource], Req }, _From, 
-            #state{ resource = Resource, 
+handle_call({request, 'POST', ["send", SessionId, "htmlfile"|Resource], Req }, _From,
+            #state{ resource = Resource,
                     server_module = ServerModule,
                     sessions = Sessions } = State) ->
-    Response =  
+    Response =
         case ets:lookup(Sessions, SessionId) of
-            [{SessionId, Pid}] -> 
+            [{SessionId, Pid}] ->
                 gen_server:call(Pid, {'htmlfile', data, Req});
             _ ->
                 apply(ServerModule, respond, [Req, 404, ""])
@@ -202,7 +202,7 @@ handle_call({request, Method, Path, Req}, _From, #state{ default_http_handler = 
     {reply, Response, State};
 
 %% Sessions
-handle_call({session, generate, ConnectionReference, Transport}, _From, #state{ 
+handle_call({session, generate, ConnectionReference, Transport}, _From, #state{
                                                                    sup = Sup,
                                                                    sessions = Sessions,
                                                                    event_manager = EventManager,
@@ -260,7 +260,7 @@ handle_info({'EXIT', Pid, _}, #state{ event_manager = EventManager, sessions = S
 
 % If misultin goes down, we stop socket.io
 handle_info({'DOWN', WebServerRef, _, _, _}, #state{ web_server_monitor = WebServerRef } = State) ->
-    {stop, normal, State};             
+    {stop, normal, State};
 
 handle_info(_Info, State) ->
     {noreply, State}.
