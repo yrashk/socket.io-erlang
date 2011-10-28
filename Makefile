@@ -9,5 +9,5 @@ compile: deps
 test: force
 	@./rebar eunit skip_deps=true
 
-force: 
+force:
 	@true

@@ -109,7 +109,7 @@ handle_call(origins, _From, #state{ origins = Origins } = State) ->
 
 handle_call({origins, Origins}, _From,State) ->
     {reply, Origins, State#state{ origins = Origins }};
-            
+
 %% Event management
 handle_call(event_manager, _From, #state{ sup = Sup } = State) ->
     Children = supervisor:which_children(Sup),

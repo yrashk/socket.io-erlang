@@ -9,7 +9,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--define(SERVER, ?MODULE). 
+-define(SERVER, ?MODULE).
 
 -record(state, {
           session_id,
@@ -56,7 +56,7 @@ start_link(Sup, SessionId, ServerModule, ConnectionReference) ->
 %%--------------------------------------------------------------------
 init([Sup, SessionId, ServerModule, {TransportType, {Req, Index}}]) ->
     process_flag(trap_exit, true),
-    PollingDuration = 
+    PollingDuration =
     case application:get_env(polling_duration) of
         {ok, Time} ->
             Time;
@@ -67,7 +67,7 @@ init([Sup, SessionId, ServerModule, {TransportType, {Req, Index}}]) ->
             ),
             20000
     end,
-    CloseTimeout = 
+    CloseTimeout =
     case application:get_env(close_timeout) of
 	{ok, Time0} ->
 	    Time0;
@@ -174,7 +174,7 @@ handle_cast({TransportType, polling_request, Req, Server}, #state { server_modul
                            caller = Server,
                            polling_duration = reset_duration(Interval) }};
 
-handle_cast({TransportType, polling_request, Req, Server}, #state { server_module = ServerModule, 
+handle_cast({TransportType, polling_request, Req, Server}, #state { server_module = ServerModule,
                                                                     message_buffer = Buffer } = State) ->
     link(ServerModule:socket(Req)),
     handle_cast({send, {buffer, Buffer}}, State#state{ connection_reference = {TransportType, connected},

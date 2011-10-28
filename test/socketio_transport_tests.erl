@@ -9,7 +9,7 @@
 t_echoes_string({Client, EventMgr}) ->
     gen_event:notify(EventMgr, {change_pid, self()}),
     socketio_client:send(Client, #msg{ content = "some text"}),
-    receive 
+    receive
         X ->
             ?assertEqual("some text", X)
     end.
@@ -18,7 +18,7 @@ t_echoes_json({Client, EventMgr}) ->
     gen_event:notify(EventMgr, {change_pid, self()}),
     JSON = [{<<"key">>,<<"value">>}],
     socketio_client:send(Client, #msg{ content = JSON, json = true }),
-    receive 
+    receive
         X ->
             ?assertEqual(JSON, X)
     end.
@@ -26,7 +26,7 @@ t_echoes_json({Client, EventMgr}) ->
 t_session_id({Client, EventMgr}) ->
     gen_event:notify(EventMgr, {change_pid, self()}),
     socketio_client:send(Client, #msg{ content = "socketio_session" }),
-    receive 
+    receive
         X ->
             ?assertEqual(socketio_client:session_id(Client), X)
     end.
@@ -48,13 +48,13 @@ transport_tests(Browser, Transport) ->
                   error_logger:delete_report_handler(error_logger_tty_h), %% suppress annoying kernel logger
                   application:start(misultin),
                   application:start(socketio),
-                  {ok, Pid} = socketio_listener:start([{http_port, 8989}, 
+                  {ok, Pid} = socketio_listener:start([{http_port, 8989},
                                                        {default_http_handler, ?MODULE}]),
                   EventMgr = socketio_listener:event_manager(Pid),
                   ok = gen_event:add_handler(EventMgr, ?MODULE,[self()]),
                   ?cmd("open -a \"" ++ Browser ++ "\" -g http://localhost:8989/"), %% FIXME: will only work on OSX
                   receive
-                      {connected, Client, EM} -> 
+                      {connected, Client, EM} ->
                           {Client, EM}
                   end
           end,
@@ -73,19 +73,19 @@ transport_tests(Browser, Transport) ->
 
 
 handle_request('GET', [], Req) ->
-    Transports = 
+    Transports =
         case ets:lookup(socketio_tests, transport) of
             [{transport, Transport}] ->
                 "transports: ['" ++ Transport ++ "']";
             _ ->
                 ""
         end,
-    Req:ok([{"Content-Type", "text/html"}], 
+    Req:ok([{"Content-Type", "text/html"}],
            "<html><head><script src=\"/socket.io/socket.io.js\"></script>"
            "<script type=\"text/javascript\">"
            "function init() { \n"
            "socket = new io.Socket('localhost', {" ++ Transports ++ ", rememberTransport: false});\n"
-           
+
            "socket.on('message',function(data){\n"
            "if (data=='socketio_close') { window.close(); } else \n"
            "if (data=='socketio_session') { socket.send(socket.transport.sessionid) } else {\n"
@@ -139,4 +139,4 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
- 
+

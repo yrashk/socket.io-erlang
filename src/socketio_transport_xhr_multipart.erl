@@ -9,7 +9,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--define(SERVER, ?MODULE). 
+-define(SERVER, ?MODULE).
 
 -record(state, {
           session_id,
@@ -56,7 +56,7 @@ start_link(Sup, SessionId, ServerModule, ConnectionReference) ->
 init([Sup, SessionId, ServerModule, {'xhr-multipart', {Req, Caller}}]) ->
     apply(ServerModule, ensure_longpolling_request, [Req]),
     process_flag(trap_exit, true),
-    HeartbeatInterval = 
+    HeartbeatInterval =
     case application:get_env(heartbeat_interval) of
         {ok, Time} ->
             Time;
@@ -67,7 +67,7 @@ init([Sup, SessionId, ServerModule, {'xhr-multipart', {Req, Caller}}]) ->
             ),
             10000
     end,
-    CloseTimeout = 
+    CloseTimeout =
     case application:get_env(close_timeout) of
         {ok, Time0} ->
             Time0;
@@ -185,7 +185,7 @@ handle_cast(heartbeat, #state{ heartbeats = Beats,
                             heartbeat_interval = reset_heartbeat(Interval) }};
 
 %% Send
-handle_cast({send, Message}, #state{ req = Req, 
+handle_cast({send, Message}, #state{ req = Req,
                                      server_module = ServerModule,
                                      connection_reference = {'xhr-multipart', connected },
                                      heartbeat_interval = Interval } = State) ->

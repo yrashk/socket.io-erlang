@@ -1,5 +1,5 @@
 #! /usr/bin/env escript
-%%! -pa ../ebin ../deps/misultin/ebin ../deps/ossp_uuid/ebin ../deps/jsx/ebin 
+%%! -pa ../ebin ../deps/misultin/ebin ../deps/ossp_uuid/ebin ../deps/jsx/ebin
 -mode(compile).
 -include_lib("../include/socketio.hrl").
 -compile(export_all).
@@ -8,13 +8,13 @@
 %% gen_event callbacks
 -export([init/1, handle_event/2, handle_call/2, handle_info/2,
           terminate/2, code_change/3]).
-          
+
 main(_) ->
     appmon:start(),
     application:start(sasl),
     application:start(misultin),
     application:start(socketio),
-    {ok, Pid} = socketio_listener:start([{http_port, 7878}, 
+    {ok, Pid} = socketio_listener:start([{http_port, 7878},
                                          {default_http_handler,?MODULE},
 					 {ssl, [
 						{certfile, "test_certificate.pem"},

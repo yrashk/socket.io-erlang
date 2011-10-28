@@ -24,7 +24,7 @@ start_link() ->
 
 init([]) ->
     {ok, { {simple_one_for_one, 5, 10}, [
-                                  {socketio_http, {socketio_http, start_link, []}, 
+                                  {socketio_http, {socketio_http, start_link, []},
                                    permanent, 5000, worker, [socketio_http]}
                                  ]} }.
 
