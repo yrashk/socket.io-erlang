@@ -2,7 +2,7 @@
 -include_lib("socketio.hrl").
 
 %% API
--export([start_link/5, start/5]).
+-export([start_link/5, start/6]).
 -export([event_manager/1, send/2, session_id/1, request/1]).
 
 %%%===================================================================
@@ -19,9 +19,10 @@
 start_link(Sup, Module, SessionId, ServerModule, ConnectionReference) ->
     Module:start_link(Sup, SessionId, ServerModule, ConnectionReference).
 
-start(Sup0, Module, SessionId, ServerModule, ConnectionReference) ->
+start(Sup0, Module, SessionId, ServerModule, ConnectionReference, Port) ->
     Children = supervisor:which_children(Sup0),
-    {Sup, _, _, _} = lists:keyfind(socketio_client_sup,1, Children),
+    Name = list_to_atom(atom_to_list(socketio_client_sup) ++ "_" ++ integer_to_list(Port)),
+    {Sup, _, _, _} = lists:keyfind(Name ,1, Children),
     supervisor:start_child(Sup, [Sup0, Module, SessionId, ServerModule, ConnectionReference]).
 
 

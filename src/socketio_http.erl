@@ -18,7 +18,8 @@
           sup,
           web_server_monitor,
           server_module,
-          resource
+          resource,
+          port  % very dirty hack
          }).
 
 %%%===================================================================
@@ -64,7 +65,8 @@ init([ServerModule, Port, Resource, SSL, DefaultHttpHandler, Sup]) ->
        sup = Sup,
        web_server_monitor = WebServerRef,
        server_module = ServerModule,
-       resource = Resource
+       resource = Resource,
+       port = Port
       }}.
 
 %%--------------------------------------------------------------------
@@ -206,10 +208,11 @@ handle_call({session, generate, ConnectionReference, Transport}, _From, #state{
                                                                    sup = Sup,
                                                                    sessions = Sessions,
                                                                    event_manager = EventManager,
-                                                                   server_module = ServerModule
+                                                                   server_module = ServerModule,
+                                                                   port = Port
                                                                   } = State) ->
     UUID = binary_to_list(ossp_uuid:make(v4, text)),
-    {ok, Pid} = socketio_client:start(Sup, Transport, UUID, ServerModule, ConnectionReference),
+    {ok, Pid} = socketio_client:start(Sup, Transport, UUID, ServerModule, ConnectionReference, Port),
     link(Pid),
     ets:insert(Sessions, [{UUID, Pid}, {Pid, UUID}]),
     gen_event:notify(EventManager, {client, Pid}),
