@@ -3,7 +3,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -15,14 +15,15 @@
 %% API functions
 %% ===================================================================
 
-start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+start_link(Port) ->
+    supervisor:start_link(?MODULE, [Port]).
 
 %% ===================================================================
 %% Supervisor callbacks
 %% ===================================================================
 
-init([]) ->
+init([Port]) ->
+    gproc:add_local_name({?MODULE, Port}),
     {ok, { {simple_one_for_one, 5, 10}, [
                                   {socketio_client, {socketio_client, start_link, []}, 
                                    transient, 5000, worker, [socketio_client]}
