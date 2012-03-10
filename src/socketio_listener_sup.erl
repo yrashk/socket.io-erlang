@@ -17,38 +17,47 @@
 
 start_link(Options) ->
     %% This is a terrible, sad hack to avoid duplicates
-    Port = proplists:get_value(http_port, Options),
-    Name = list_to_atom(atom_to_list(?MODULE)++"_"++integer_to_list(Port)),
-    supervisor:start_link({local, Name}, ?MODULE, [Options]).
+    case supervisor:start_link(?MODULE, [Options]) of
+        {ok, Pid} ->
+            {ok, Pid};
+        ignore ->
+            {ok, gproc:lookup_local_name({?MODULE,proplists:get_value(http_port, Options, 80)})}
+    end.
 
 %% ===================================================================
 %% Supervisor callbacks
 %% ===================================================================
 
 init([Options]) ->
-    ServerModule = proplists:get_value(server, Options, socketio_http_misultin),
     HttpPort = proplists:get_value(http_port, Options, 80),
-    DefaultHttpHandler = proplists:get_value(default_http_handler, Options),
-    Resource = lists:reverse(string:tokens(proplists:get_value(resource, Options, "socket.io"),"/")),
-    SSL = proplists:get_value(ssl, Options),
-    Origins = proplists:get_value(origins,Options,[{"*", "*"}]),
-    {ok, { {one_for_one, 5, 10}, [
-                                  {socketio_listener_event_manager, {gen_event, start_link, []},
-                                   permanent, 5000, worker, [gen_event]},
+    try gproc:add_local_name({?MODULE, HttpPort}) of
+        _ ->
+            ServerModule = proplists:get_value(server, Options, socketio_http_misultin),
+            DefaultHttpHandler = proplists:get_value(default_http_handler, Options),
+            Resource = lists:reverse(string:tokens(proplists:get_value(resource, Options, "socket.io"),"/")),
+            SSL = proplists:get_value(ssl, Options),
+            Origins = proplists:get_value(origins,Options,[{"*", "*"}]),
+            {ok, { {one_for_one, 5, 10}, [
+                        {socketio_listener_event_manager, {gen_event, start_link, []},
+                         permanent, 5000, worker, [gen_event]},
 
-                                  {socketio_listener, {socketio_listener, start_link, [self(), Origins]},
-                                   permanent, 5000, worker, [socketio_listener]},
+                        {socketio_listener, {socketio_listener, start_link, [self(), Origins]},
+                         permanent, 5000, worker, [socketio_listener]},
 
-                                  {socketio_http, {socketio_http, start_link, [ServerModule,
-                                                                               HttpPort,
-                                                                               Resource,
-									       SSL,
-                                                                               DefaultHttpHandler,
-                                                                               self()]}, 
-                                   permanent, 5000, worker, [socketio_http]},
+                        {socketio_http, {socketio_http, start_link, [ServerModule,
+                                                                     HttpPort,
+                                                                     Resource,
+                                                                     SSL,
+                                                                     DefaultHttpHandler,
+                                                                     self()]}, 
+                         permanent, 5000, worker, [socketio_http]},
 
-                                  {list_to_atom("socketio_client_sup_" ++ integer_to_list(HttpPort)), {socketio_client_sup, start_link, [HttpPort]}, 
-                                   permanent, infinity, supervisor, [socketio_client_sup]}
+                        {{socketio_client_sup,HttpPort}, {socketio_client_sup, start_link, [HttpPort]}, 
+                         permanent, infinity, supervisor, [socketio_client_sup]}
 
-                                 ]} }.
+                        ]} }
+    catch
+        error:badarg ->
+            ignore
+    end.
 

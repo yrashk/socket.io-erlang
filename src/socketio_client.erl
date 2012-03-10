@@ -20,9 +20,7 @@ start_link(Sup, Module, SessionId, ServerModule, ConnectionReference) ->
     Module:start_link(Sup, SessionId, ServerModule, ConnectionReference).
 
 start(Sup0, Module, SessionId, ServerModule, ConnectionReference, Port) ->
-    Children = supervisor:which_children(Sup0),
-    Name = list_to_atom(atom_to_list(socketio_client_sup) ++ "_" ++ integer_to_list(Port)),
-    {Sup, _, _, _} = lists:keyfind(Name ,1, Children),
+    Sup = gproc:lookup_local_name({socketio_client_sup, Port}),
     supervisor:start_child(Sup, [Sup0, Module, SessionId, ServerModule, ConnectionReference]).
 
 

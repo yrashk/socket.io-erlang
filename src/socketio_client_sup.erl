@@ -16,14 +16,14 @@
 %% ===================================================================
 
 start_link(Port) ->
-    Name = list_to_atom(atom_to_list(?MODULE)++"_"++integer_to_list(Port)),
-    supervisor:start_link({local, Name}, ?MODULE, []).
+    supervisor:start_link(?MODULE, [Port]).
 
 %% ===================================================================
 %% Supervisor callbacks
 %% ===================================================================
 
-init([]) ->
+init([Port]) ->
+    gproc:add_local_name({?MODULE, Port}),
     {ok, { {simple_one_for_one, 5, 10}, [
                                   {socketio_client, {socketio_client, start_link, []}, 
                                    transient, 5000, worker, [socketio_client]}
