@@ -17,8 +17,6 @@ main(_) ->
     application:start(socketio),
     {ok, Pid} = socketio_listener:start([{http_port, 7878}, 
                                          {default_http_handler,?MODULE}]),
-    {ok, Pid} = socketio_listener:start([{http_port, 7878}, 
-                                         {default_http_handler,?MODULE}]),
     {ok, Pid2} = socketio_listener:start([{http_port, 7879}, 
                                           {default_http_handler,?MODULE}]),
     true = Pid2 =/= Pid,
