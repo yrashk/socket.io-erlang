@@ -1,5 +1,5 @@
 #! /usr/bin/env escript
-%%! -pa ../ebin ../deps/misultin/ebin ../deps/ossp_uuid/ebin ../deps/jsx/ebin 
+%%! -pa ../ebin ../deps/misultin/ebin ../deps/jsx/ebin 
 -mode(compile).
 -include_lib("../include/socketio.hrl").
 -compile(export_all).

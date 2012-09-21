@@ -215,7 +215,7 @@ handle_call({session, generate, ConnectionReference, Transport}, _From, #state{
                                                                    event_manager = EventManager,
                                                                    server_module = ServerModule
                                                                   } = State) ->
-    UUID = binary_to_list(ossp_uuid:make(v4, text)),
+    UUID = binary_to_list(uuid_utc()),
     {ok, Pid} = socketio_client:start(Sup, Transport, UUID, ServerModule, ConnectionReference),
     link(Pid),
     ets:insert(Sessions, [{UUID, Pid}, {Pid, UUID}]),
@@ -226,6 +226,13 @@ handle_call({session, generate, ConnectionReference, Transport}, _From, #state{
 handle_call(event_manager, _From, #state{ event_manager = EventMgr } = State) ->
     {reply, EventMgr, State}.
 
+uuid_utc() ->
+  Now = {_, _, Micro} = erlang:now(),
+  Nowish = calendar:now_to_universal_time(Now),
+  Nowsecs = calendar:datetime_to_gregorian_seconds(Nowish),
+  Then = calendar:datetime_to_gregorian_seconds({{1970, 1, 1}, {0, 0, 0}}),
+  Prefix = io_lib:format("~14.16.0b", [(Nowsecs - Then) * 1000000 + Micro]),
+  list_to_binary(Prefix ++ integer_to_list(Micro) ++ mochihex:to_hex(crypto:rand_bytes(9))).
 
 %%--------------------------------------------------------------------
 %% @private

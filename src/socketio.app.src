@@ -3,7 +3,7 @@
   {description, ""},
   {vsn, "1"},
   {registered, []},
-  {agner, [{requires, ["misultin", "ossp_uuid",{"jsx","0.9.0"},"proper","ex_uri"]}]},
+  {agner, [{requires, ["misultin", {"jsx","0.9.0"},"proper","ex_uri"]}]},
   {applications, [
                   kernel,
                   stdlib,
