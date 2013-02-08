@@ -32,7 +32,7 @@ Depending on a way you have your Erlang distribution installed, you might need c
 
 see [https://github.com/basho/riak_wiki/issues/45](https://github.com/basho/riak_wiki/issues/45)
 
-### OSX: 
+### OSX:
 If you use MacPorts to install Erlang instead of Homebrew or manual builds, this is how you install SSL for Erlang:
 
     sudo port install erlang +ssl
@@ -47,8 +47,16 @@ Socket.io-erlang has entered maintenance mode. The original [socket.io](http://s
 
 Because of this, we will be keeping the socket.io-erlang features as they are. We will still maintain the application and try to fix all issues and bugs to keep it working, but the development itself will be suspended.
 
+## Contributing
+
+1. Fork it
+2. Create your feature branch (`git checkout -b my-new-feature`)
+3. Don't forget to write tests for your changes
+4. Commit changes (`git commit -am 'Add some feature'`)
+5. Push to the branch (`git push origin my-new-feature`)
+6. Create new Pull Request
+
 ## TODO
 
 - License
-- How can I contribute?
 - Known Issues
